@@ -24,7 +24,7 @@ libnet_ptag_t tcp;
 libnet_ptag_t ip;
 
 pcap_t* handle;
-char errbuf[PCAP_ERRBUF_SIZE];
+char pcap_errbuf[PCAP_ERRBUF_SIZE];
 struct bpf_program fp;
 char filter_exp[] = "ip proto \\tcp and (ip[8] = ttl) and (tcp[tcpflags] = tcp-syn)";
 
@@ -135,6 +135,11 @@ void inject(u_char* args, const struct pcap_pkthdr* header, const u_char* packet
 	tcph = (struct libnet_tcp_hdr*)(packet + 2 + LIBNET_ETH_H + LIBNET_IPV4_H);
 	
 	print_packet(iph, tcph);
+		
+	tcp = libnet_build_tcp(ntohs(tcph->th_sport), ntohs(tcph->th_dport), ntohl(tcph->th_seq), 0, TH_ACK, 0, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
+	ip = libnet_build_ipv4(LIBNET_IPV4_H + LIBNET_TCP_H, 0, 0, IP_DF, iph->ip_ttl, IPPROTO_TCP, 0, iph->ip_src.s_addr, iph->ip_dst.s_addr, NULL, 0, l, ip);
+	if(-1 == libnet_write(l))
+		g_warning("libnet_write: %s\n", libnet_geterror(l));
 	
 	tcp = libnet_build_tcp(ntohs(tcph->th_sport), ntohs(tcph->th_dport), ntohl(tcph->th_seq) - 1, 0, TH_RST, 0, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
 	ip = libnet_build_ipv4(LIBNET_IPV4_H + LIBNET_TCP_H, 0, 0, IP_DF, iph->ip_ttl, IPPROTO_TCP, 0, iph->ip_src.s_addr, iph->ip_dst.s_addr, NULL, 0, l, ip);
@@ -143,7 +148,7 @@ void inject(u_char* args, const struct pcap_pkthdr* header, const u_char* packet
 	
 	gettimeofday(&now, NULL);
 	timersub(&now, &ref_ts, &now);
-	fprintf(stderr, "inject it at %d.%06d\n\n", now.tv_sec, now.tv_usec);
+	fprintf(stderr, "injected at %d.%06d\n\n", now.tv_sec, now.tv_usec);
 }
 
 int main(int argc, char** argv){
@@ -153,9 +158,9 @@ int main(int argc, char** argv){
 	gettimeofday(&ref_ts, NULL);
 	
 	/* start listening */
-	handle = pcap_open_live("any", BUFSIZ, 1, cfg_pcaptimeout, errbuf);
+	handle = pcap_open_live("any", BUFSIZ, 1, cfg_pcaptimeout, pcap_errbuf);
 	if (handle == NULL) {
-		fprintf(stderr, "Couldn't open device %s: %s\n", "any", errbuf);
+		fprintf(stderr, "Couldn't open device %s: %s\n", "any", pcap_errbuf);
 		return 2;
 	}
 	/* Compile and apply the filter */
