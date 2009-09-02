@@ -1,5 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include <glib/gstdio.h>
+//#include <stdlib.h>
 #include <glib.h>
 #include <libnet.h>
 #include <pcap.h>
@@ -7,7 +7,7 @@
 
 #define _NAME "Scholar Zhang"
 #define _DESCR "Romance of the West Chamber"
-#define _VERSION "0.3.3"
+#define _VERSION "0.3.2"
 #define _DATE "Sep 2 2009"
 #define _COPYING "Copyright (c) 2009, Yingying Cui. License: BSD."
 
@@ -22,10 +22,16 @@ GOptionEntry gopts[] = {
 	{"debug", 'd', 0, G_OPTION_ARG_NONE, &cfg_debug, 
 		"Enable debug", NULL},
 	{"interface", 'i', 0, G_OPTION_ARG_STRING, &cfg_interface, 
-		"Interface to listen on", NULL},
+		"Interface to listen on. Use - to select interactively", NULL},
 	{NULL, 0, 0, 0, NULL, NULL, NULL}
 };
 
+/*
+TODO - client to server injection is to send 
+an rst and an ack after syn to server, with remote 
+stack's conformity of tcp protocol presumed.
+So how about server to client injection? (i.e. localhost is server)
+*/
 void handler(u_char* _, const struct pcap_pkthdr *hdr, const u_char* data){
 	(void)_;
 	switch(linktype){
@@ -66,10 +72,11 @@ for faster packet injection
 	libnet_t l;
 	l.injection_type = LIBNET_LINK;
 
-/* syn increases seq by one, so consequent 
-packets with seq == syn's should be ignored
+/* XXX - on linux, syn increases seq by one, so consequent 
+packets with seq == syn's should be ignored.
+But windows requires this. why?
 */
-	//tcph->th_seq = htonl(ntohl(tcph->th_seq) - 1);
+	tcph->th_seq = htonl(ntohl(tcph->th_seq) - 1);
 
 //send an rst with bad seq
 	tcph->th_flags = TH_RST;
@@ -93,6 +100,9 @@ void quiet(const gchar* a, GLogLevelFlags b, const gchar* c, gpointer d){
 }
 
 int main(int argc, char** argv){
+	//XXX why tf is stderr buffered on mingw?
+	setbuf(stderr, NULL);
+
 	GError* gerr;
 	/* options */
 	GOptionContext* context = g_option_context_new(NULL);
@@ -107,20 +117,44 @@ int main(int argc, char** argv){
  						| G_LOG_FLAG_RECURSION, quiet, NULL);
 
 	char errbuf[PCAP_ERRBUF_SIZE];
-	struct bpf_program fp;
-	char filter_exp[] = "tcp and (tcp[tcpflags] = tcp-syn)";
-	/* start listening */
+
+	/* inteface lookup */
+	if(cfg_interface[0] == '-'){
+		pcap_if_t* alldevs;
+		if(pcap_findalldevs(&alldevs, errbuf) == -1)
+			g_error("pcap_findalldevs: %s", errbuf);
+
+		pcap_if_t* d;
+		int i = 0;
+		for(d = alldevs; d != NULL; d = d->next){
+			g_fprintf(stderr, "%d. %s%s: %s\n", i++, d->name,
+				d->flags & PCAP_IF_LOOPBACK ? " (Loopback)" : "",
+				d->description ? d->description : "(No description)");
+		}
+		
+		g_fprintf(stderr, "Select an interface [0-%d]: ", i-1);
+		scanf("%d", &i);
+		for(d = alldevs; d != NULL && i--; d = d->next);
+		cfg_interface = g_alloca(sizeof(d->name));
+		g_stpcpy(cfg_interface, d->name);
+	}
 	if(cfg_interface == NULL)
 		cfg_interface = pcap_lookupdev(errbuf);
 	if(cfg_interface == NULL)
 		g_error("interface not found");
+
 	g_debug("Using interface %s", cfg_interface);
 
-	pd = pcap_open_live(cfg_interface, BUFSIZ, 0, 1000, errbuf);
+	/* start listening */
+	//XXX - on mingw32, to_ms really makes a large latency 
+	//rendering rst;ack useless; but on debian it's not like this
+	pd = pcap_open_live(cfg_interface, BUFSIZ, 0, 1, errbuf);
 	if (pd == NULL)
 		g_error("pcap_open_live(%s): %s", "any", errbuf);
 
 	/* Compile and apply the filter */
+	struct bpf_program fp;
+	char filter_exp[] = "tcp and (tcp[tcpflags] = tcp-syn)";
 	if (pcap_compile(pd, &fp, filter_exp, 0, 0) == -1)
 		g_error("pcap_compile(%s): %s", filter_exp, pcap_geterr(pd));
 
