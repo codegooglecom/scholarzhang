@@ -15,9 +15,7 @@
 pcap_t* pd;
 int linktype;
 u_int linkoffset;
-
-int cfg_debug = 0;
-char* cfg_interface = NULL;
+u_int count = 0;
 
 /*
 TODO - client to server injection is to send 
@@ -74,57 +72,46 @@ But windows requires this. why?
 //send an rst with bad seq
 	tcph->th_flags = TH_RST;
 	if(libnet_do_checksum(&l, (void*)iph, IPPROTO_TCP, tcp_len) == -1){
-		fprintf(stderr, "libnet_do_checksum: %s", l.err_buf);
+		fprintf(stderr, "libnet_do_checksum: %s\n", l.err_buf);
 		exit(1);
 	}
 	if(pcap_sendpacket(pd, a, hdr->caplen) == -1){
-		fprintf(stderr, "pcap_sendpacket: %s", pcap_geterr(pd));
+		fprintf(stderr, "pcap_sendpacket: %s\n", pcap_geterr(pd));
 		exit(1);
 	}
 
 //send an ack
 	tcph->th_flags = TH_ACK;
 	if(libnet_do_checksum(&l, (void*)iph, IPPROTO_TCP, tcp_len) == -1){
-		fprintf(stderr, "libnet_do_checksum: %s", l.err_buf);
+		fprintf(stderr, "libnet_do_checksum: %s\n", l.err_buf);
 		exit(1);
 	}
 	if(pcap_sendpacket(pd, a, hdr->caplen) == -1){
-		fprintf(stderr, "pcap_sendpacket: %s", pcap_geterr(pd));
+		fprintf(stderr, "pcap_sendpacket: %s\n", pcap_geterr(pd));
 		exit(1);
 	}
 
-	if(cfg_debug)fprintf(stderr, "debug: injected %d>%d", ntohs(tcph->th_sport), ntohs(tcph->th_dport));
+	fprintf(stderr, "Hit the Wall! #%d: ", ++count);
+	fprintf(stderr, "%s:%d > ", inet_ntoa(iph->ip_src), ntohs(tcph->th_sport));
+	fprintf(stderr, "%s:%d\n", inet_ntoa(iph->ip_dst), ntohs(tcph->th_dport));
 }
 
 int main(int argc, char** argv){
 	//XXX why tf is stderr buffered on mingw?
 	setbuf(stderr, NULL);
 
-	int opt;
-	while((opt = getopt(argc, argv, "di:")) != -1)
-		switch(opt){
-			case 'd':
-				cfg_debug = 1;
-				break;
-			case 'i':
-				cfg_interface = optarg;
-				break;
-			default:
-				printf("Usage: scholarzhang -i {-|<dev>} [-d]\n");
-				return 0;
-		}
-
-	if(cfg_interface == NULL){
-		printf("Usage: scholarzhang -i {-|<dev>} [-d]\nInterface not specified\n");
+	if(argc < 2){
+		printf("Usage: scholarzhang {-|<dev>}\nInterface not specified\n");
 		return 0;
 	}
 	char errbuf[PCAP_ERRBUF_SIZE];
 
 	/* inteface lookup */
-	if(cfg_interface[0] == '-'){
+	char* device = argv[1];
+	if(device[0] == '-'){
 		pcap_if_t* alldevs;
 		if(pcap_findalldevs(&alldevs, errbuf) == -1){
-			fprintf(stderr, "pcap_findalldevs: %s", errbuf);
+			fprintf(stderr, "pcap_findalldevs: %s\n", errbuf);
 			exit(1);
 		}
 
@@ -136,28 +123,28 @@ int main(int argc, char** argv){
 				d->description ? d->description : "(No description)");
 		}
 		
-		fprintf(stderr, "Select an interface [0-%d]: ", i-1);
+		fprintf(stderr, "Select an device [0-%d]: ", i-1);
 		scanf("%d", &i);
 		for(d = alldevs; d != NULL && i--; d = d->next);
-		cfg_interface = alloca(sizeof(d->name));
-		strcpy(cfg_interface, d->name);
+		device = alloca(sizeof(d->name));
+		strcpy(device, d->name);
 		pcap_freealldevs(alldevs);
 	}
-	if(cfg_interface == NULL)
-		cfg_interface = pcap_lookupdev(errbuf);
-	if(cfg_interface == NULL){
-		fprintf(stderr, "interface not found");
+	if(device == NULL)
+		device = pcap_lookupdev(errbuf);
+	if(device == NULL){
+		fprintf(stderr, "device not found\n");
 		exit(1);
 	}
 
-	if(cfg_debug)fprintf(stderr, "debug: Using interface %s", cfg_interface);
+	fprintf(stderr, "Using device %s\n", device);
 
 	/* start listening */
 	//XXX - on mingw32, to_ms really makes a large latency 
 	//rendering rst;ack useless; but on debian it's not like this
-	pd = pcap_open_live(cfg_interface, BUFSIZ, 0, 1, errbuf);
+	pd = pcap_open_live(device, BUFSIZ, 0, 1, errbuf);
 	if (pd == NULL){
-		fprintf(stderr, "pcap_open_live(%s): %s", "any", errbuf);
+		fprintf(stderr, "pcap_open_live(%s): %s\n", "any", errbuf);
 		exit(1);
 	}
 
@@ -165,12 +152,12 @@ int main(int argc, char** argv){
 	struct bpf_program fp;
 	char filter_exp[] = "tcp and (tcp[tcpflags] = tcp-syn)";
 	if (pcap_compile(pd, &fp, filter_exp, 0, 0) == -1){
-		fprintf(stderr, "pcap_compile(%s): %s", filter_exp, pcap_geterr(pd));
+		fprintf(stderr, "pcap_compile(%s): %s\n", filter_exp, pcap_geterr(pd));
 		exit(1);
 	}
 
 	if (pcap_setfilter(pd, &fp) == -1){
-		fprintf(stderr, "pcap_setfilter(%s): %s", filter_exp, pcap_geterr(pd));
+		fprintf(stderr, "pcap_setfilter(%s): %s\n", filter_exp, pcap_geterr(pd));
 		exit(1);
 	}
 
@@ -207,16 +194,16 @@ int main(int argc, char** argv){
 			break;
 #endif		
 		default:
-			fprintf(stderr, "Unsupported link type: %d", linktype);
+			fprintf(stderr, "Unsupported link type: %d\n", linktype);
 			exit(1);
 	}
 
 	if (pcap_loop(pd, -1, handler, NULL) == 1) {
-		fprintf(stderr, "pcap_loop: %s", pcap_geterr(pd));
+		fprintf(stderr, "pcap_loop: %s\n", pcap_geterr(pd));
 		return 1;
 	}
-	else if(cfg_debug)
-		fprintf(stderr, "debug: Interupted, quit now.");
+	else 
+		fprintf(stderr, "Interupted, quit now.\n");
 
 	return 0;
 }
