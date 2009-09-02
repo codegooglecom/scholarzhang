@@ -3,6 +3,7 @@
 #include <string.h>
 #include <libnet.h>
 #include <malloc.h>
+#include <sys/time.h>
 #include <pcap.h>
 #include <pcap/bpf.h>
 
@@ -91,8 +92,12 @@ But windows requires this. why?
 		exit(1);
 	}
 
-	fprintf(stderr, "Hit the Wall! #%d: ", ++count);
-	fprintf(stderr, "%s:%d > ", inet_ntoa(iph->ip_src), ntohs(tcph->th_sport));
+	char time[10];
+	struct timeval now;
+	gettimeofday(&now, NULL);
+	strftime(time, 10, "%H:%M:%S", localtime(&now.tv_sec));
+	fprintf(stderr, "[%s.%06ld] wallhit #%d: ", time, now.tv_usec, ++count);
+	fprintf(stderr, "%15s:%d > ", inet_ntoa(iph->ip_src), ntohs(tcph->th_sport));
 	fprintf(stderr, "%s:%d\n", inet_ntoa(iph->ip_dst), ntohs(tcph->th_dport));
 }
 
@@ -101,7 +106,9 @@ int main(int argc, char** argv){
 	setbuf(stderr, NULL);
 
 	if(argc < 2){
-		printf("Usage: scholarzhang {-|<dev>}\nInterface not specified\n");
+		printf("%s %s - %s, %s\n", _NAME, _VERSION, _DESCR, _DATE);
+		printf("Visit http://code.google.com/p/scholarzhang for updates and bug reports\n\n");
+		printf("Usage: scholarzhang {-|<dev>}\n");
 		return 0;
 	}
 	char errbuf[PCAP_ERRBUF_SIZE];
