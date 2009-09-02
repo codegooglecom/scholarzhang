@@ -137,6 +137,7 @@ int main(int argc, char** argv){
 		for(d = alldevs; d != NULL && i--; d = d->next);
 		cfg_interface = g_alloca(sizeof(d->name));
 		g_stpcpy(cfg_interface, d->name);
+		pcap_freealldevs(alldevs);
 	}
 	if(cfg_interface == NULL)
 		cfg_interface = pcap_lookupdev(errbuf);
