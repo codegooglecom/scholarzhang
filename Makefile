@@ -1,7 +1,7 @@
 CC = gcc
-LIBS =	-lglib-2.0 -lnet -lwpcap -lws2_32
-INCLUDES = -I/mingw/include/glib-2.0 -I/mingw/lib/glib-2.0/include 
-CFLAGS = -Wall -O2 $(INCLUDES) -W -Wextra -mms-bitfields
+LIBS =	-lnet -lwpcap -lws2_32
+INCLUDES = 
+CFLAGS = -Wall -O2 $(INCLUDES) -W -Wextra 
 scholarzhang.exe: scholarzhang.c
 	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
 
