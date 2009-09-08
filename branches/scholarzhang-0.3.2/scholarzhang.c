@@ -7,7 +7,7 @@
 
 #define _NAME "Scholar Zhang"
 #define _DESCR "Romance of the West Chamber"
-#define _VERSION "0.3.3"
+#define _VERSION "0.3.2"
 #define _DATE "Sep 2 2009"
 #define _COPYING "Copyright (c) 2009, Yingying Cui. License: BSD."
 
