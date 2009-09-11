@@ -68,8 +68,9 @@ for faster packet injection
 
 /* syn increases seq by one, so consequent 
 packets with seq == syn's should be ignored
+But windows requires this. why? // What does this sentence mean? windows server expect this or windows client?
 */
-	//tcph->th_seq = htonl(ntohl(tcph->th_seq) - 1);
+	tcph->th_seq = htonl(ntohl(tcph->th_seq) - 1);
 
 //send an rst with bad seq
 	tcph->th_flags = TH_RST;
