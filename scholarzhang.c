@@ -68,7 +68,7 @@ for faster packet injection
 
 /* syn increases seq by one, so consequent 
 packets with seq == syn's should be ignored
-But windows requires this. why? // What does this sentence mean? windows server expect this or windows client?
+But windows requires this. why?
 */
 	tcph->th_seq = htonl(ntohl(tcph->th_seq) - 1);
 
@@ -79,7 +79,8 @@ But windows requires this. why? // What does this sentence mean? windows server 
 	if(pcap_sendpacket(pd, a, hdr->caplen) == -1)
 		g_debug("pcap_sendpacket: %s", pcap_geterr(pd));
 
-//send an ack
+//send an ack with correct seq but bad ack
+	tcph->th_seq = htonl(ntohl(tcph->th_seq) + 2);
 	tcph->th_flags = TH_ACK;
 	if(libnet_do_checksum(&l, (void*)iph, IPPROTO_TCP, tcp_len) == -1)
 		g_warning("libnet_do_checksum: %s", l.err_buf);
