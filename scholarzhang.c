@@ -81,7 +81,8 @@ But windows requires this. why?
 		exit(1);
 	}
 
-//send an ack
+//send an ack with correct seq but bad ack
+	tcph->th_seq = htonl(ntohl(tcph->th_seq) + 2);
 	tcph->th_flags = TH_ACK;
 	if(libnet_do_checksum(&l, (void*)iph, IPPROTO_TCP, tcp_len) == -1){
 		fprintf(stderr, "libnet_do_checksum: %s\n", l.err_buf);
