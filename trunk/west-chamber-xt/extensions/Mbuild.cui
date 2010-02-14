@@ -1,0 +1,1 @@
+obj-${build_CUI}      += libxt_CUI.so

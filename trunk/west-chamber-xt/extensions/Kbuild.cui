@@ -1,0 +1,1 @@
+obj-${build_CUI}      += xt_CUI.o
