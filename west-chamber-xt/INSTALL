@@ -1,0 +1,9 @@
+1. get a snapshot from http://xtables-addons.git.sourceforge.net
+   or install xtables-addons-source
+2. patch the source into its directory tree
+3. ./autogen.sh
+4. ./configure ...
+5. make
+6. make install
+7. iptables -A INPUT -p tcp --sport 80 -j ZHANG;
+   iptables -A INPUT -p tcp --dport 80 -j CUI
