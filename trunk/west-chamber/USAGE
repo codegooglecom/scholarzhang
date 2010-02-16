@@ -112,7 +112,7 @@ you can also use tcpdump to save traffic dump. when problems happen, you can
 use wireshark to open it and trace back for the reason.
 
   $ cd /dev/shm
-  # tcpdump -Kpq -C2 -W9 -ieth0 -s0 -wcap port 80 &
+  # tcpdump -Kpq -C2 -W10 -ieth0 -s0 -wcap port 80 &
 
 when problem happen, type `fg' to make the job foreground then ^C to stop it.
 
@@ -121,7 +121,7 @@ parameters of tcpdump explained:
   -p: no promiscuous
   -q: be quiet
   -C2: rotate dump file every 2000000 bytes
-  -W9: 9 dump file in maximum
+  -W10: 10 dump file in maximum
   -ieth0: input interface is eth0
   -s0: capture whole packet
   -wcap: save dump file as "capXX"
