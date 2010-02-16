@@ -1,0 +1,93 @@
+Installation instructions for Xtables-addons
+============================================
+
+Xtables-addons uses the well-known configure(autotools) infrastructure
+in combination with the kernel's Kbuild system.
+
+	$ ./autogen.sh
+	$ ./configure CFLAGS="..." --prefix=/usr ...
+	$ make
+	# make install
+
+
+Supported configurations for this release
+=========================================
+
+	* iptables >= 1.4.3
+
+	* kernel-source >= 2.6.17, no upper bound known
+	  with prepared build/output directory
+	  - CONFIG_NF_CONNTRACK or CONFIG_IP_NF_CONNTRACK
+	  - CONFIG_NF_CONNTRACK_MARK or CONFIG_IP_NF_CONNTRACK_MARK
+	    enabled =y or as module (=m)
+	  - CONFIG_CONNECTOR y/m if you wish to receive userspace
+	    notifications from pknock through netlink/connector
+
+Extra notes:
+
+	* in the kernel 2.6.18.x series, >= 2.6.18.5 is required
+
+	* requires that no vendor backports interfere
+
+
+Selecting extensions
+====================
+
+You can edit the "mconfig" file to select what modules to build and
+install. By default, all modules are enabled.
+
+
+Configuring and compiling
+=========================
+
+./configure [options]
+
+--with-kbuild=
+
+	Specifies the path to the kernel build output directory. We need
+	it for building the kernel extensions. It defaults to
+	/lib/modules/$(running version)/build, which usually points to
+	the right directory. (If not, you need to install something.)
+
+	For RPM building, it should be /usr/src/linux-obj/...
+	or whatever location the distro makes use of.
+
+--with-xtables=
+
+	Specifies the path to the directory where we may find
+	xtables.h, should it not be within the standard C compiler
+	include path (/usr/include), or if you want to override it.
+	The directory will be checked for xtables.h and
+	include/xtables.h. (The latter to support both standard
+	/usr/include and the iptables source root.)
+
+--with-xtlibdir=
+
+	Specifies the path to where the newly built extensions should
+	be installed when `make install` is run. It uses the same
+	default as the Xtables/iptables package, ${libexecdir}/xtables.
+
+If you want to enable debugging, use
+
+	./configure CFLAGS="-ggdb3 -O0"
+
+(-O0 is used to turn off instruction reordering, which makes debugging
+much easier.)
+
+
+Build-time options
+==================
+
+V= controls the verbosity of make commands.
+V=0	"silent" (output filename)
+V=1	"verbose" (entire gcc command line)
+
+
+Note to distribution packagers
+==============================
+
+Except for --with-kbuild, distributions should not have a need to
+supply any other flags (besides --prefix=/usr and perhaps
+--libdir=/usr/lib64, etc.) to configure when all prerequired packages
+are installed. If iptables-devel is installed, necessary headers should
+be in /usr/include, so --with-xtables is not needed.

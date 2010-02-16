@@ -1,0 +1,103 @@
+
+  using ipset
+----------------------------------------------------------------------------------
+note that the ipset you are using should be >= 4.2 which fixes some bug
+in hash table resizing. old version with this bug may cause kernel oops if fed
+with certain parameters.
+
+features from ipset are used by this package. you may read the ipset(8) manpage
+first, and set up your custom sets for target confining.
+
+sample scripts are provided in the `examples' directory including:
+GOOGLE, YOUTUBE, CHINA and the NOCLIP set. you may write your own ip set.
+
+examples of restoring ipsets from saved scripts using `ipset -R`:
+
+# ipset -R
+-N YOUTUBE nethash --hashsize 50 --probes 1
+-A YOUTUBE 64.15.112.0/20
+-A YOUTUBE 82.129.37.0/24
+-A YOUTUBE 208.65.152.0/22
+-A YOUTUBE 208.117.224.0/19
+-A YOUTUBE 213.146.171.0/24
+COMMIT
+^D
+
+--probes 1 is the fastest, --probes 4 will be slow. you can adjust your settings
+to your satisfaction. see syslog if --hashsize is so small and cause too many 
+times of resizing.
+
+then finally set the NOCLIP set to pack your sets into one set:
+
+# ipset -R
+-N NOCLIP setlist --size 4
+-A NOCLIP GOOGLE
+-A NOCLIP YOUTUBE
+COMMIT
+^D
+
+  using iptables
+----------------------------------------------------------------------------------
+1. ZHANG - client-side connection obfuscation
+
+# iptables \
+-A INPUT \
+-p tcp --sport 80 --tcp-flags FIN,SYN,RST,ACK SYN,ACK \
+-m state --state ESTABLISHED \
+-m set --match-set NOCLIP src \
+-j ZHANG \
+-m comment --comment "client-side connection obfuscation"
+
+this means incoming SYN/ACK from the ip address in the NOCLIP set and from port 80
+will be replied with special packets to make connection obfuscated against the GFW.
+
+this will make your free from keyword reset filtering when visiting a normal
+server. but certain rfc non-compliant hosts and firewalls will reset the connection
+if received such replies sent by ZHANG. this is why we need ipset to limit
+the ip range that will be dealt with by ZHANG to the minimum of what we really 
+need.
+
+2. CUI - server-side connection obfuscation
+
+# iptables \
+-A INPUT \
+-p tcp --dport 80 --tcp-flags FIN,SYN,RST,ACK SYN \
+-m state --state NEW \
+-m set --match-set CHINA src \
+-j CUI \
+-m comment --comment "server-side connection obfuscation"
+
+CHINA set can be set using `ipset -R < CHINA`
+
+warning: ZHANG and CUI are terminating target, they will ACCEPT packets sent to
+them, so any rules after them have no effect.
+they should be put to the last place if other filtering need to be done.
+
+3. log gfw tcp resets in syslog
+
+# iptables \
+-A INPUT \
+-p tcp --sport 80 \
+-m state --state ESTABLISHED \
+-m gfw \
+-j LOG --log-level info --log-prefix gfw \
+-m comment --comment "log gfw tcp resets"
+
+when you see `connection reset' notice in browser, you may see what happened
+on the transport layer in the tail of syslog.
+
+4. drop gfw dns hijacking packets
+
+# iptables \
+-A INPUT \
+-p udp --sport 53 \
+-m state --state ESTABLISHED \
+-m gfw \
+-j DROP \
+-m comment --comment "drop gfw dns hijacks"
+
+you may update your resolv.conf by:
+1. modify dhclient.conf, find the `prepend domain-name-servers ...;' line and
+   set your favorite overwall dns server.
+2. restart dhclient, just one method: ifconfig eth0 down; ifconfig eth0 up.
+3. host -tA twitter.com -- true result and no gfw poisoning anymore!
