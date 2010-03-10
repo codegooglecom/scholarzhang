@@ -1,0 +1,27 @@
+#summary instructions for installation.
+#labels Phase-Deploy
+
+此处提供的源代码是xtables-addons的重包装，保留了一些必须组件，添加了我们写的组件，去掉了不需要的组件。
+
+== 环境要求 ==
+
+ * iptables >= 1.4.3
+ * kernel >= 2.6.17 (>= 2.6.18.5 if 2.6.18.x)
+   * - CONFIG_NF_CONNTRACK or CONFIG_IP_NF_CONNTRACK
+   * - CONFIG_NF_CONNTRACK_MARK or CONFIG_IP_NF_CONNTRACK_MARK enabled =y or as module (=m)
+
+== 步骤 ==
+安装准备好autotools工具链（autconf，automake，libtool）。
+
+{{{
+$ ./autogen.sh
+$ CFLAGS="-O3" ./configure --prefix=/usr ...
+$ make
+# make install
+}}}
+
+注意不同的发行版对于路径设置有所不同，比如debian需要特别设置`--libexecdir=/lib`。
+
+就完成了。
+
+更详细的说明可以查看代码库中的INSTALL文件。
