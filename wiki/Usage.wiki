@@ -1,5 +1,5 @@
 #summary general HOWTO after installation.
-#labels Phase-Support
+#labels Phase-Deploy
 
 == 使用ipset ==
 
