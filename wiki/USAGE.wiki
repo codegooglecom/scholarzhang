@@ -1,6 +1,19 @@
 #summary general HOWTO after installation.
 #labels Phase-Deploy
 
+在安装完成之后，一般用户的标准用法就是：
+{{{
+# cd examples
+# ipset -R < YOUTUBE
+# ipset -R < GOOGLE
+# ipset -R < NOCLIP
+# iptables -A INPUT -p tcp --sport 80 --tcp-flags FIN,SYN,RST,ACK SYN,ACK -m state --state ESTABLISHED -m set --match-set NOCLIP src -j ZHANG
+# iptables -A INPUT -p tcp --sport 80 -m state --state ESTABLISHED -m gfw -j LOG --log-level info --log-prefix "gfw: "
+# iptables -A INPUT -p udp --sport 53 -m state --state ESTABLISHED -m gfw -j DROP
+# echo nameserver 8.8.8.8 > /etc/resolv.conf
+}}}
+然后可以开始测试，比如Youtube。下面详细解释含义。
+
 == 使用ipset ==
 
 注意ipset的版本应该大于4.2，否则hash表扩大的时候某种参数设置可能会导致kernel oops。
@@ -72,7 +85,7 @@ COMMIT
 -m comment --comment "drop gfw dns hijacks"
 }}}
 
-`-m gfw`同样可以匹配GFW发出的DNS劫持包，并针对性地采取丢弃的措施。将nameserver设置（resolv.conf或者dhclient.conf中的prepend domain-name-servers）为一个未收污染的服务器，比如8.8.8.8，然后开启此条规则，便可获得正确的解析结果。
+`-m gfw`同样可以匹配GFW发出的DNS劫持包，并针对性地采取丢弃的措施。将nameserver设置（resolv.conf或者dhclient.conf中的prepend domain-name-servers以永久保存此优先设置）为一个未收污染的服务器，比如8.8.8.8，然后开启此条规则，便可获得正确的解析结果。
 
 === CUI: 服务端连接混淆 ===
 {{{
