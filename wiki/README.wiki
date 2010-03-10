@@ -19,7 +19,7 @@
 == 局限 ==
 西厢计划的连接混淆功能对于基于IP地址的封锁和其他无状态的封锁不能生效，因为它需要通过注入攻击改变GFW的连接状态，如果封锁与连接状态无关便无法进行连接混淆。另外，连接混淆的实现假设连接双方遵守RFC。有一些目标主机或者防火墙不遵守RFC，可能导致正常不含关键词的连接被对方终止或者忽略。因此我们特别使用ipset，把作用范围限制在需要的地址段（比如Google），以避免不必要的问题。
 
-西厢计划目前依赖linux内核的netfilter功能，因此要求用户平台是linux，暂时没有移植。之前有一个基于WinPcap的[http://code.google.com/p/scholarzhang/source/browse/branches/scholarzhang-0.3.2-mingw32 版本]可以在MinGW32环境下编译运行，实现了连接混淆的部分，未实现反DNS劫持的部分，用户仍然可以试用，但不再维护。
+西厢计划目前依赖linux内核的netfilter功能，因此要求用户平台是linux，暂时没有移植。之前有一个基于WinPcap的[http://code.google.com/p/scholarzhang/source/browse/branches/scholarzhang-0.3.2-mingw32 版本]可以在MinGW32环境下编译运行，实现了连接混淆的部分，未实现反DNS劫持的部分，用户仍然可以[http://scholarzhang.googlecode.com/files/scholarzhang-0.3.2-mingw32-alpha.zip 试用]，但不再维护。
 
 西厢计划所用的GFW伪包指纹可能在此项目发布之后被GFW更改，因此用户可能需要使用最新的版本才能让功能生效。
 
