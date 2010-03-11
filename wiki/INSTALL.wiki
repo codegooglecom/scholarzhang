@@ -13,6 +13,8 @@
 == 步骤 ==
 安装准备好autotools工具链（autconf，automake，libtool）。
 
+include路径中应该含有`xtables.h`头文件，对于Ubuntu/Debian用户可以使用`apt-file search xtables.h`查找需要安装哪个包。
+
 {{{
 $ ./autogen.sh
 $ CFLAGS="-O3" ./configure --prefix=/usr ...
