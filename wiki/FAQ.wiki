@@ -1,4 +1,4 @@
-#summary frequent asked questions
+#summary frequently asked questions
 #labels Phase-Support
 
  * configure时找不到某包？
