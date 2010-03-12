@@ -15,7 +15,7 @@
 == 步骤 ==
 安装准备好autotools工具链（autconf，automake，libtool）。
 
-include路径中应该含有`xtables.h`头文件，分别需要在iptables的开发包（或源码）以及内核头文件包（或者内核源码）。对于Ubuntu/Debian用户通常需要安装iptables-dev以及linux-headers-```uname -r```。
+include路径中应该含有`xtables.h`头文件，分别在iptables的开发包（或源码）和内核头文件包（或者内核源码）中。因此Ubuntu/Debian用户通常需要安装iptables-dev以及linux-headers-```uname -r```。
 
 {{{
 $ ./autogen.sh
@@ -24,7 +24,7 @@ $ make
 # make install
 }}}
 
-注意不同的发行版对于路径设置有所不同，比如debian需要特别设置`--libexecdir=/lib`。
+注意不同的发行版对于路径设置有所不同，比如debian需要在configure时特别设置`--libexecdir=/lib`。
 
 就完成了。
 
