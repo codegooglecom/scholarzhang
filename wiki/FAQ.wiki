@@ -1,0 +1,34 @@
+#summary frequent asked questions
+#labels Phase-Support
+
+ * configure时找不到某包？
+
+需要xtables.h在include路径。对于debian和ubuntu用户，需要安装iptables-dev和linux-headers-`uname -r`这两个包。
+
+ * 运行时找不到某模块？
+
+如果找不到的是ZHANG、CUI、或者gfw模块，可能是目标文件没有安装到正确的路径。查找你所使用的发行版iptables模块的所在路径，并正确设置configure选项。如果是set模块找不到，你可能需要更新iptables到要求的版本或者更新。
+
+ * 自带的ipset与官方的ipset有什么区别？
+
+总之版本需要 >= 4.2。
+
+ * 我是mac用户，我……？
+
+目前不支持BSD系平台。
+
+ * 我是gentoo用户，我……？
+
+FIXME
+
+ * 我想要_____平台上的移植版，什么时候会有？
+
+如果有人想要而且移植了一个出来，就有了。反之，亦然。
+
+ * 使用的时候有时候会被莫名的重置连接，怎么回事？
+
+不稳定的状态是比较难以避免的，可能有多种因素导致不稳定。如果你有诊断能力，可以使用tcpdump或者wireshark等工具，稍微多尝试几次查找问题。常见导致不稳定的因素有：连接的中间节点不严格遵守RFC，丢包。
+
+ * 我在局域网，完全无法使用，怎么回事？
+
+有一些NAT网关不遵守RFC，因此无法使用。

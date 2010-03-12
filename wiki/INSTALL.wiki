@@ -10,6 +10,8 @@
    * - CONFIG_NF_CONNTRACK or CONFIG_IP_NF_CONNTRACK
    * - CONFIG_NF_CONNTRACK_MARK or CONFIG_IP_NF_CONNTRACK_MARK enabled =y or as module (=m)
 
+目前只支持Linux，不支持BSD系和Windows以及其他平台。
+
 == 步骤 ==
 安装准备好autotools工具链（autconf，automake，libtool）。
 
