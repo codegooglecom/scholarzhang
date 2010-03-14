@@ -1,3 +1,9 @@
+/*
+WestChamber Windows
+Elysion
+March 14 2010
+*/
+
 #include "precomp.h"
 #pragma hdrstop
 
@@ -22,7 +28,7 @@ unsigned int ntohl(unsigned int hostlong)
 
 //----------------------------------------------------------------------------------------------------
 
-PUCHAR GetPacket(IN PNDIS_PACKET packet)		//引用:http://www.cppblog.com/ay19880703/archive/2009/06/23/62233.html
+PUCHAR GetPacket(IN PNDIS_PACKET packet)		//Ref:http://www.cppblog.com/ay19880703/archive/2009/06/23/62233.html
 {
 NDIS_STATUS status ;
 PNDIS_BUFFER NdisBuffer ;
@@ -63,7 +69,7 @@ void DebugPrintPacket(PUCHAR packet,ULONG size)
 	KdPrint(("\n"));
 }
 
-NDIS_STATUS														//引用:http://www.cnblogs.com/xuneng/archive/2009/11/30/1613452.html
+NDIS_STATUS														//Ref:http://www.cnblogs.com/xuneng/archive/2009/11/30/1613452.html
 MySendPacket (
    NDIS_HANDLE     NdisBindingHandle,
    NDIS_HANDLE     NdisSendPacketPool,
@@ -320,7 +326,7 @@ BOOLEAN IsGFWPoisoned(PUCHAR data)
     }
     return FALSE;
 }
-USHORT GetChecksum(PVOID buf,int size)					//引用:http://hi.bccn.net/space-112902-do-blog-id-12121.html
+USHORT GetChecksum(PVOID buf,int size)					//Ref:http://hi.bccn.net/space-112902-do-blog-id-12121.html
 {
 	USHORT* buffer=(USHORT*)buf;
  unsigned long cksum=0;
@@ -484,9 +490,8 @@ BOOLEAN WestChamberReceiverMain(PNDIS_PACKET packet,PADAPT adapt)
 	BOOLEAN result=TRUE,udp=FALSE,tcp=FALSE,gfw=FALSE,inlist=FALSE,sign=FALSE;
 
 	PUCHAR pack=GetPacket(packet);
-	if(IsIPVerFour(pack))		//目前只支持v4
+	if(IsIPVerFour(pack))		//v4 supported only.
 {
-	//函数流程须让进入的函数最少，以保证速度。
 
 	udp=IsUdpWithPortFiftyThree(pack);
 	tcp=IsTcpWithPortEighty(pack);

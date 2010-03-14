@@ -1,7 +1,9 @@
-//TreeHash: IP Query
-//Project: WestChamber
-//Elysion
-//Last Edition: March.14.2010
+/*
+WestChamber Windows
+Elysion
+March 14 2010
+*/
+
 //Now we use a Hash-AVL structure.
 //Splay Tree is also a considerable substitution.
 
@@ -15,7 +17,7 @@ void HashTableInit()
 int j;
 nodes=(avl_node**)ExAllocatePool(NonPagedPool,sizeof(avl_node*)*0x10000);
 for(j=0;j<0x10000;j++)
-nodes[j]=NULL;               //建立0x10000棵空树 
+nodes[j]=NULL;               //Emply Trees
 initialized=TRUE;
 }
 void HashTableDeInit()
@@ -31,7 +33,7 @@ for(j=0;j<0x10000;j++)
 ExFreePool(nodes);
 	}
 }
-void HashTableInsert(unsigned int value)           //一个u32对应一个IP
+void HashTableInsert(unsigned int value)
 {
            unsigned short num=(value>>16);
            unsigned short val=(value&0xFFFF);

@@ -1,5 +1,10 @@
-#pragma once
+/*
+WestChamber Windows
+Elysion
+March 14 2010
+*/
 
+#pragma once
 #pragma pack(1)
 
 //Structures

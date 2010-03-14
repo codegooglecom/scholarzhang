@@ -1,4 +1,8 @@
-//WestChamber: Edited so that it may work in Kernel Mode. --Elysion
+/*
+WestChamber Windows
+Elysion (Edited)
+March 14 2010
+*/
 
 /*
     avl.c - AVL tree implementation
