@@ -488,8 +488,8 @@ BOOLEAN WestChamberReceiverMain(PNDIS_PACKET packet,PADAPT adapt)
 //The return value indicates whether if we should let the packet pass.
 {
 	BOOLEAN result=TRUE,udp=FALSE,tcp=FALSE,gfw=FALSE,inlist=FALSE,sign=FALSE;
-
 	PUCHAR pack=GetPacket(packet);
+	if(pack==NULL) return TRUE;
 	if(IsIPVerFour(pack))		//v4 supported only.
 {
 

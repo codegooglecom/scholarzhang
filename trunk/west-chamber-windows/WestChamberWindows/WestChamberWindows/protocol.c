@@ -891,8 +891,6 @@ Return Value:
 			BOOLEAN result=WestChamberReceiverMain(Packet,pAdapt);
 			if(result==FALSE)
 			{
-//--------------------发包测试----------------------------------
-//--------------------发包测试结束------------------------------
 				//Simply drop the packet.
 				return NDIS_STATUS_NOT_ACCEPTED;
 			}
