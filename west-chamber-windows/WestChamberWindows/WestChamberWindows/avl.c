@@ -1,8 +1,8 @@
 /*
-WestChamber Windows
-Elysion (Edited)
-March 14 2010
-*/
+ *WestChamber Windows
+ *Elysion (Editor)
+ *March 14 2010
+ */
 
 /*
     avl.c - AVL tree implementation
@@ -65,8 +65,8 @@ March 14 2010
 #ifdef DEBUG_AVL
 
 /* Look up the nodes at the left and at the right of a given node. */
-static void avl_neighbours (struct ncp_avl_node * node, struct ncp_avl_node * tree, 
-		struct ncp_avl_node ** to_the_left, struct ncp_avl_node ** to_the_right)
+static void avl_neighbours (struct avl_node * node, struct avl_node * tree, 
+		struct avl_node ** to_the_left, struct avl_node ** to_the_right)
 {
 	ncp_avl_key_t key = node->avl_key;
 
@@ -91,13 +91,13 @@ static void avl_neighbours (struct ncp_avl_node * node, struct ncp_avl_node * tr
 		return;
 	}
 	if (tree->ncp_avl_left != ncp_avl_empty) {
-		struct ncp_avl_node * node;
+		struct avl_node * node;
 		for (node = tree->avl_left; node->avl_right != ncp_avl_empty; node = node->avl_right)
 			continue;
 		*to_the_left = node;
 	}
 	if (tree->avl_right != ncp_avl_empty) {
-		struct ncp_avl_node * node;
+		struct avl_node * node;
 		for (node = tree->avl_right; node->avl_left != ncp_avl_empty; node = node->avl_left)
 			continue;
 		*to_the_right = node;
@@ -114,13 +114,13 @@ static void avl_neighbours (struct ncp_avl_node * node, struct ncp_avl_node * tr
  * nodes[0]..nodes[k-1] such that
  * nodes[0] is the root and nodes[i+1] = nodes[i]->{avl_left,avl_right}.
  */
-static void avl_rebalance (struct ncp_avl_node *** nodeplaces_ptr, int count)
+static void avl_rebalance (struct avl_node *** nodeplaces_ptr, int count)
 {
 	for ( ; count > 0 ; count--) {
-		struct ncp_avl_node ** nodeplace = *--nodeplaces_ptr;
-		struct ncp_avl_node * node = *nodeplace;
-		struct ncp_avl_node * nodeleft = node->avl_left;
-		struct ncp_avl_node * noderight = node->avl_right;
+		struct avl_node ** nodeplace = *--nodeplaces_ptr;
+		struct avl_node * node = *nodeplace;
+		struct avl_node * nodeleft = node->avl_left;
+		struct avl_node * noderight = node->avl_right;
 		unsigned char heightleft = heightof(nodeleft);
 		unsigned char heightright = heightof(noderight);
 		if (heightright + 1 < heightleft) {
@@ -129,8 +129,8 @@ static void avl_rebalance (struct ncp_avl_node *** nodeplaces_ptr, int count)
 			/*                          /   \                       */
 			/*                       n+2      n                     */
 			/*                                                      */
-			struct ncp_avl_node * nodeleftleft = nodeleft->avl_left;
-			struct ncp_avl_node * nodeleftright = nodeleft->avl_right;
+			struct avl_node * nodeleftleft = nodeleft->avl_left;
+			struct avl_node * nodeleftright = nodeleft->avl_right;
 			unsigned char heightleftright = heightof(nodeleftright);
 			if (heightof(nodeleftleft) >= heightleftright) {
 				/*                                                        */
@@ -164,8 +164,8 @@ static void avl_rebalance (struct ncp_avl_node *** nodeplaces_ptr, int count)
 		}
 		else if (heightleft + 1 < heightright) {
 			/* similar to the above, just interchange 'left' <--> 'right' */
-			struct ncp_avl_node * noderightright = noderight->avl_right;
-			struct ncp_avl_node * noderightleft = noderight->avl_left;
+			struct avl_node * noderightright = noderight->avl_right;
+			struct avl_node * noderightleft = noderight->avl_left;
 			unsigned char heightrightleft = heightof(noderightleft);
 			if (heightof(noderightright) >= heightrightleft) {
 				node->avl_right = noderightleft; noderight->avl_left = node;
@@ -191,15 +191,15 @@ static void avl_rebalance (struct ncp_avl_node *** nodeplaces_ptr, int count)
 }
 
 /* Insert a node into a tree. */
-void avl_insert (struct ncp_avl_node * new_node, struct ncp_avl_node ** ptree)
+void avl_insert (struct avl_node * new_node, struct avl_node ** ptree)
 {
 	ncp_avl_key_t key = new_node->avl_key;
-	struct ncp_avl_node ** nodeplace = ptree;
-	struct ncp_avl_node ** stack[ncp_avl_maxheight];
+	struct avl_node ** nodeplace = ptree;
+	struct avl_node ** stack[ncp_avl_maxheight];
 	int stack_count = 0;
-	struct ncp_avl_node *** stack_ptr = &stack[0]; /* = &stack[stackcount] */
+	struct avl_node *** stack_ptr = &stack[0]; /* = &stack[stackcount] */
 	for (;;) {
-		struct ncp_avl_node * node = *nodeplace;
+		struct avl_node * node = *nodeplace;
 		if (node == ncp_avl_empty)
 			break;
 		*stack_ptr++ = nodeplace; stack_count++;
@@ -218,17 +218,17 @@ void avl_insert (struct ncp_avl_node * new_node, struct ncp_avl_node ** ptree)
 /* Insert a node into a tree, and
  * return the node to the left of it and the node to the right of it.
  */
-static __inline void avl_insert_neighbours (struct ncp_avl_node * new_node, struct ncp_avl_node ** ptree,
-	struct ncp_avl_node ** to_the_left, struct ncp_avl_node ** to_the_right)
+static __inline void avl_insert_neighbours (struct avl_node * new_node, struct avl_node ** ptree,
+	struct avl_node ** to_the_left, struct avl_node ** to_the_right)
 {
 	ncp_avl_key_t key = new_node->avl_key;
-	struct ncp_avl_node ** nodeplace = ptree;
-	struct ncp_avl_node ** stack[ncp_avl_maxheight];
+	struct avl_node ** nodeplace = ptree;
+	struct avl_node ** stack[ncp_avl_maxheight];
 	int stack_count = 0;
-	struct ncp_avl_node *** stack_ptr = &stack[0]; /* = &stack[stackcount] */
+	struct avl_node *** stack_ptr = &stack[0]; /* = &stack[stackcount] */
 	*to_the_left = *to_the_right = NULL;
 	for (;;) {
-		struct ncp_avl_node * node = *nodeplace;
+		struct avl_node * node = *nodeplace;
 		if (node == ncp_avl_empty)
 			break;
 		*stack_ptr++ = nodeplace; stack_count++;
@@ -248,16 +248,16 @@ static __inline void avl_insert_neighbours (struct ncp_avl_node * new_node, stru
 }
 
 /* Removes a node out of a tree. */
-static void avl_remove (struct ncp_avl_node * node_to_delete, struct ncp_avl_node ** ptree)
+static void avl_remove (struct avl_node * node_to_delete, struct avl_node ** ptree)
 {
 	ncp_avl_key_t key = node_to_delete->avl_key;
-	struct ncp_avl_node ** nodeplace = ptree;
-	struct ncp_avl_node ** stack[ncp_avl_maxheight];
+	struct avl_node ** nodeplace = ptree;
+	struct avl_node ** stack[ncp_avl_maxheight];
 	int stack_count = 0;
-	struct ncp_avl_node *** stack_ptr = &stack[0]; /* = &stack[stackcount] */
-	struct ncp_avl_node ** nodeplace_to_delete;
+	struct avl_node *** stack_ptr = &stack[0]; /* = &stack[stackcount] */
+	struct avl_node ** nodeplace_to_delete;
 	for (;;) {
-		struct ncp_avl_node * node = *nodeplace;
+		struct avl_node * node = *nodeplace;
 #ifdef DEBUG_AVL
 		if (node == ncp_avl_empty) {
 			/* what? node_to_delete not found in tree? */
@@ -279,9 +279,9 @@ static void avl_remove (struct ncp_avl_node * node_to_delete, struct ncp_avl_nod
 		*nodeplace_to_delete = node_to_delete->avl_right;
 		stack_ptr--; stack_count--;
 	} else {
-		struct ncp_avl_node *** stack_ptr_to_delete = stack_ptr;
-		struct ncp_avl_node ** nodeplace = &node_to_delete->avl_left;
-		struct ncp_avl_node * node;
+		struct avl_node *** stack_ptr_to_delete = stack_ptr;
+		struct avl_node ** nodeplace = &node_to_delete->avl_left;
+		struct avl_node * node;
 		for (;;) {
 			node = *nodeplace;
 			if (node->avl_right == ncp_avl_empty)
@@ -303,7 +303,7 @@ static void avl_remove (struct ncp_avl_node * node_to_delete, struct ncp_avl_nod
 #ifdef DEBUG_AVL
 
 /* print a list */
-static void printf_list (struct ncp_avl_node * vma)
+static void printf_list (struct avl_node * vma)
 {
 	printf("[");
 	while (vma) {
@@ -317,7 +317,7 @@ static void printf_list (struct ncp_avl_node * vma)
 }
 
 /* print a tree */
-static void printf_avl (struct ncp_avl_node * tree)
+static void printf_avl (struct avl_node * tree)
 {
 	if (tree != ncp_avl_empty) {
 		printf("(");
@@ -337,7 +337,7 @@ static void printf_avl (struct ncp_avl_node * tree)
 static char *avl_check_point = "somewhere";
 
 /* check a tree's consistency and balancing */
-static void avl_checkheights (struct ncp_avl_node * tree)
+static void avl_checkheights (struct avl_node * tree)
 {
 	int h, hl, hr;
 
@@ -356,7 +356,7 @@ static void avl_checkheights (struct ncp_avl_node * tree)
 }
 
 /* check that all values stored in a tree are < key */
-static void avl_checkleft (struct ncp_avl_node * tree, ncp_avl_key_t key)
+static void avl_checkleft (struct avl_node * tree, ncp_avl_key_t key)
 {
 	if (tree == ncp_avl_empty)
 		return;
@@ -368,7 +368,7 @@ static void avl_checkleft (struct ncp_avl_node * tree, ncp_avl_key_t key)
 }
 
 /* check that all values stored in a tree are > key */
-static void avl_checkright (struct ncp_avl_node * tree, ncp_avl_key_t key)
+static void avl_checkright (struct avl_node * tree, ncp_avl_key_t key)
 {
 	if (tree == ncp_avl_empty)
 		return;
@@ -380,7 +380,7 @@ static void avl_checkright (struct ncp_avl_node * tree, ncp_avl_key_t key)
 }
 
 /* check that all values are properly increasing */
-static void avl_checkorder (struct ncp_avl_node * tree)
+static void avl_checkorder (struct avl_node * tree)
 {
 	if (tree == ncp_avl_empty)
 		return;
@@ -404,10 +404,10 @@ static void avl_check (struct task_struct * task, char *caller)
 #endif
 
 //----------------------Added by Elysion----------------------------------
-avl_node* avl_create(unsigned short val)
+struct avl_node* avl_create(unsigned short val)
 {
-	avl_node* node=(avl_node*)ExAllocatePool(NonPagedPool,sizeof(avl_node));
-	//avl_node* node=(avl_node*)malloc(sizeof(avl_node));
+	struct avl_node* node=(struct avl_node*)ExAllocatePool(NonPagedPool,sizeof(struct avl_node));
+	//struct avl_node* node=(struct avl_node*)malloc(sizeof(struct avl_node));
 	node->value=val;
 	node->avl_left=NULL;
 	node->avl_right=NULL;
@@ -415,7 +415,7 @@ avl_node* avl_create(unsigned short val)
 	node->avl_height=1;
 	return node;
 }
-avl_node* avl_search(avl_node* tree,unsigned short val)
+struct avl_node* avl_search(struct avl_node* tree,unsigned short val)
 {
 	while(tree!=NULL && tree->value!=val)
             {
@@ -424,7 +424,7 @@ avl_node* avl_search(avl_node* tree,unsigned short val)
                           }
             return tree;
 }
-void avl_delete(avl_node* node)
+void avl_delete(struct avl_node* node)
 {
 	if(node->avl_left!=NULL) avl_delete(node->avl_left);
 	if(node->avl_right!=NULL) avl_delete(node->avl_right);

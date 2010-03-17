@@ -452,9 +452,13 @@ PtUnload(
 {
 	DBGPRINT(("PtUnload: entered\n"));
 	PtUnloadProtocol();
+
 	//-------------------WestChamber---------------------
+
 	DeInitializeIpTable();
+
 	//-------------------WestChamber---------------------
+
 	DBGPRINT(("PtUnload: done!\n"));
 }
 
@@ -736,9 +740,9 @@ Return Value:
 --*/
 {
 	//-------------------------------------------------------------------------
-	PNDIS_BUFFER    pMySendPacketBuffer;
-	PUCHAR          pMySendBuffer = NULL;
-    ULONG           dwMySendBufferLength; 
+	PNDIS_BUFFER    packet_buffer;
+	PUCHAR          send_buffer = NULL;
+    ULONG           send_buffer_length; 
 	//-------------------------------------------------------------------------
 	PADAPT			pAdapt =(PADAPT)ProtocolBindingContext;
 	PNDIS_PACKET	Pkt;
@@ -772,26 +776,23 @@ Return Value:
 
 		SendRsvd = (PSEND_RSVD)(Packet->ProtocolReserved);
 		Pkt = SendRsvd->OriginalPkt;
-		 if (!Pkt )
-       {
-           NdisUnchainBufferAtFront(Packet, &pMySendPacketBuffer);
-
-           if (pMySendPacketBuffer)
-           {
-               NdisQueryBufferSafe( pMySendPacketBuffer, 
-                                    (PVOID *)&pMySendBuffer, 
-                                    &dwMySendBufferLength, 
-                                    HighPagePriority ); 
-               if (pMySendBuffer && dwMySendBufferLength)
-               {
-                   NdisFreeMemory(pMySendBuffer, dwMySendBufferLength, 0);
+		//-------------------WestChamber-----------------------------------
+		 if (!Pkt) {		//our packet			 
+			//get buffer
+			NdisUnchainBufferAtFront(Packet, &packet_buffer);
+			if (packet_buffer) {
+               NdisQueryBufferSafe(packet_buffer, (PVOID *)&send_buffer, &send_buffer_length, HighPagePriority); 
+			   if (send_buffer && send_buffer_length) {
+				//got buffer, free it.
+                   NdisFreeMemory(send_buffer, send_buffer_length, 0);
                }
-
-               NdisFreeBuffer( pMySendPacketBuffer );
+               NdisFreeBuffer(packet_buffer);
            }
+			//free packet
             NdisDprFreePacket(Packet);
-			return;				//time to go...
+			return;
 		}
+		 //-------------------WestChamber----------------------------------
 	
 #ifndef WIN9X
 		NdisIMCopySendCompletePerPacketInfo (Pkt, Packet);
@@ -887,14 +888,13 @@ Return Value:
 		Packet = NdisGetReceivedPacket(pAdapt->BindingHandle, MacReceiveContext);
 		if (Packet != NULL)
 		{
-                   //////////////////////WestChamber:CodeStart/////////////////////////////
+			//------------------------------WestChamber---------------------------------
 			BOOLEAN result=WestChamberReceiverMain(Packet,pAdapt);
-			if(result==FALSE)
-			{
+			if(result==FALSE) {
 				//Simply drop the packet.
 				return NDIS_STATUS_NOT_ACCEPTED;
 			}
-                   ////////////////////////WestChamber:CodeEnd/////////////////////////////
+			//------------------------------WestChamber---------------------------------
 		    //
 		    // The miniport below did indicate up a packet. Use information
 		    // from that packet to construct a new packet to indicate up.
@@ -1116,14 +1116,13 @@ Return Value:
 	NDIS_STATUS			Status;
 	PNDIS_PACKET		MyPacket;
 	BOOLEAN				Remaining;
-//////////////////////WestChamber:CodeStart/////////////////////////////
+	//------------------------------WestChamber---------------------------------
 			BOOLEAN result=WestChamberReceiverMain(Packet,pAdapt);
-			if(result==FALSE)
-			{				
+			if(result==FALSE) {
 				//Simply drop the packet.
 				return NDIS_STATUS_NOT_ACCEPTED;
 			}
-////////////////////////WestChamber:CodeEnd/////////////////////////////
+	//------------------------------WestChamber---------------------------------
 	//
 	// Drop the packet silently if the upper miniport edge isn't initialized
 	//
