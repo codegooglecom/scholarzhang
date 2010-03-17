@@ -7,11 +7,15 @@
 #include "precomp.h"
 #pragma hdrstop
 
+////////////////////////Private Members////////////////////
+
 //Hash table.
 struct avl_node** nodes;
 
 //Initialization Flag
 BOOLEAN initialized;
+
+///////////////////////////////////////////////////////////
 
 void HashTableInit()
 {
@@ -78,6 +82,7 @@ BOOLEAN InitializeIpTable(LPCWSTR binary_file)
 
 	ZwClose(file);
 	KdPrint(("%d logs of IP Address loaded.\n",num));
+
 	return TRUE;
 }
 

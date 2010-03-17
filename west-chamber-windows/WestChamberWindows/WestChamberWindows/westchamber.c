@@ -7,6 +7,8 @@
 #include "precomp.h"
 #pragma hdrstop
 
+enum FILTER_STATE filter_state;
+
 unsigned short ntohs(unsigned short x)
 {
         unsigned char *s = (unsigned char *) &x;
@@ -385,10 +387,12 @@ BOOLEAN WestChamberReceiverMain(PNDIS_PACKET packet,PADAPT adapt)
 	tcp = IsTcpWithPortEighty(pack);
 	if(udp || tcp)
 		gfw = IsGFWPoisoned(pack);
-	if(tcp)
+
+	if(tcp && filter_state != FILTER_STATE_NONE)
 		sign = IsTcpSynAck(pack);
-	//if(sign)
-		//inlist=IsReceivedPacketInList(pack);
+
+	if(sign && filter_state == FILTER_STATE_IPLOG)
+		inlist=IsReceivedPacketInList(pack);
 
 	if(gfw)	{
 		PrintLog("Detected GFW Poisoned Data -- ");
@@ -397,14 +401,26 @@ BOOLEAN WestChamberReceiverMain(PNDIS_PACKET packet,PADAPT adapt)
 			result = FALSE;
 		}
 		else
-			PrintLog("Type=TCP, Port=80");
+			PrintLog("Type=TCP, Port=80\n");
 	}	
 
-	//if(inlist)
-	if(sign) {
-		//PrintLog(" -- In IP List -- CodeZhang Launched.\n");
-		PrintLog("CodeZhang Launched.\n");
-		CodeZhang(pack,adapt);
+	switch (filter_state) {
+		case FILTER_STATE_NONE:
+			break;
+		case FILTER_STATE_IPLOG:
+			if (inlist) {
+				PrintLog(" -- IP in list -- CodeZhang Launched.\n");
+				CodeZhang(pack,adapt);
+			}
+			break;
+		case FILTER_STATE_ALL:
+			if (sign) {
+				PrintLog("CodeZhang Launched.\n");
+				CodeZhang(pack,adapt);
+			}
+			break;
+		default:
+			break;
 	}
 
 	FreePacket(pack);
