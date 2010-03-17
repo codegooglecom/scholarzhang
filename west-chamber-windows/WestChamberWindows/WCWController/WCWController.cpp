@@ -21,7 +21,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		return -1;
 	}
 	printf("Current status(%d=NONE,%d=IPLOG,%d=ALL)   :   ",FILTER_STATE_NONE,FILTER_STATE_IPLOG,FILTER_STATE_ALL);
-	UCHAR status;
+	UINT status;
 	DWORD recv;
 	DeviceIoControl(handle,WEST_CHAMBER_FILTER_GET,NULL,0,&status,4,&recv,NULL);
 	printf("%d\n",status);

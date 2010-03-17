@@ -360,9 +360,9 @@ Return Value:
 			ControlCode=irpStack->Parameters.DeviceIoControl.IoControlCode;
 			switch (ControlCode) {
 				case WEST_CHAMBER_FILTER_SET:
-					KdPrint(("Setting IpLog State...(new val=%d)\n",Irp->AssociatedIrp.SystemBuffer));
 					RtlMoveMemory(&filter_state,Irp->AssociatedIrp.SystemBuffer,4);
-					if (filter_state < 0 || filter_state > 2) {
+					KdPrint(("Setting IpLog State...(new_state=%d)\n",filter_state));
+					if (filter_state != FILTER_STATE_NONE && filter_state != FILTER_STATE_IPLOG && filter_state!=FILTER_STATE_ALL) {
 						PrintLog("Unrecognized Command. Set to IPLOG_NONE.");
 						filter_state=FILTER_STATE_NONE;
 					}
