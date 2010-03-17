@@ -109,6 +109,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\iplog.c"
+				>
+			</File>
+			<File
 				RelativePath=".\miniport.c"
 				>
 			</File>
@@ -118,10 +122,6 @@
 			</File>
 			<File
 				RelativePath=".\protocol.c"
-				>
-			</File>
-			<File
-				RelativePath=".\treehash.c"
 				>
 			</File>
 			<File
@@ -150,15 +150,15 @@
 				>
 			</File>
 			<File
+				RelativePath=".\iplog.h"
+				>
+			</File>
+			<File
 				RelativePath=".\passthru.h"
 				>
 			</File>
 			<File
 				RelativePath=".\precomp.h"
-				>
-			</File>
-			<File
-				RelativePath=".\treehash.h"
 				>
 			</File>
 			<File

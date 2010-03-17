@@ -211,10 +211,10 @@ Return Value:
 	}
 
 	//----------------WestChamber: Initialization Start--------------------
+	
+	filter_state=FILTER_STATE_ALL;
 
 	InitializeIpTable(L"\\??\\C:\\iplog.bin");
-	//we dont need to manually free the space allocated by TreeHash, as it should stay
-	//in the kernel memory until this driver is unloaded.
 
 	//----------------WestChamber: Initialization Finished-----------------
 
@@ -342,6 +342,9 @@ Return Value:
 {
 	PIO_STACK_LOCATION  irpStack;
 	NTSTATUS	        status = STATUS_SUCCESS;
+	//----------------------------------------------
+	ULONG				ControlCode;
+	//----------------------------------------------
 
 	DBGPRINT(("==>Pt Dispatch\n"));
 	irpStack = IoGetCurrentIrpStackLocation(Irp);
@@ -353,10 +356,27 @@ Return Value:
 		case IRP_MJ_CLOSE:
 			break;        
 		case IRP_MJ_DEVICE_CONTROL:
-			//
-			// Add code here to handle ioctl commands sent to passthru.
-			//
-			break;        
+		//-----------------------------------------------------------------
+			ControlCode=irpStack->Parameters.DeviceIoControl.IoControlCode;
+			switch (ControlCode) {
+				case WEST_CHAMBER_FILTER_SET:
+					KdPrint(("Setting IpLog State...(new val=%d)\n",Irp->AssociatedIrp.SystemBuffer));
+					RtlMoveMemory(&filter_state,Irp->AssociatedIrp.SystemBuffer,4);
+					if (filter_state < 0 || filter_state > 2) {
+						PrintLog("Unrecognized Command. Set to IPLOG_NONE.");
+						filter_state=FILTER_STATE_NONE;
+					}
+					break;
+				case WEST_CHAMBER_FILTER_GET:
+					KdPrint(("Getting IpLog State...(current=%d)\n",filter_state));
+					RtlMoveMemory(Irp->AssociatedIrp.SystemBuffer,&filter_state,4);
+					Irp->IoStatus.Information=4;
+					break;
+				default:
+					break;
+			}
+			break;
+		//-----------------------------------------------------------------
 		default:
 			break;
 	}

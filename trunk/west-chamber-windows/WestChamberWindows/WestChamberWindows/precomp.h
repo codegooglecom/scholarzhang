@@ -1,5 +1,5 @@
 #include <ndis.h>
 #include "avl.h"
 #include "passthru.h"
-#include "treehash.h"
+#include "iplog.h"
 #include "westchamber.h"
