@@ -113,3 +113,30 @@ $ cd /dev/shm
 # tcpdump -Kpq -C2 -W10 -ieth0 -s0 -wcap port 80 &
 }}}
 当浏览器工作不正常时，输入`fg`然后`^C`结束程序，打开最新的一个dump。稍微解释一下参数含义：`-K`不检查TCP检验和，`-p`不使用混杂模式，`-q`安静，`-C2`每2000000字节换一个文件保存，`-W10`最多十个文件循环使用，`-ieth0`使用eth0，`-s0`捕获整个包，`-wcap`文件名为“capXX”。也可以自行调整。
+
+== 附表 ==
+Wikipedia
+{{{
+# ipset -R
+-N WIKIMEDIA nethash --hashsize 50 --probes 1 --resize 50
+-A WIKIMEDIA 208.80.152.0/22
+-A WIKIMEDIA 91.198.174.0/24
+COMMIT
+^D
+# ipset -A NOCLIP WIKIMEDIA
+}}}
+
+Facebook
+{{{
+# ipset -R
+-N FACEBOOK nethash --hashsize 50 --probes 1
+-A FACEBOOK 69.63.176.0/20
+-A FACEBOOK 69.220.144.0/20
+-A FACEBOOK 204.15.20.0/24
+-A FACEBOOK 204.15.21.0/24
+-A FACEBOOK 204.15.22.0/24
+-A FACEBOOK 204.15.23.0/24
+COMMIT
+^D
+# ipset -A NOCLIP FACEBOOK
+}}}
