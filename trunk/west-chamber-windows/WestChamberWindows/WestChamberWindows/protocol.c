@@ -1120,7 +1120,8 @@ Return Value:
 			BOOLEAN result=WestChamberReceiverMain(Packet,pAdapt);
 			if(result==FALSE) {
 				//Simply drop the packet.
-				return NDIS_STATUS_NOT_ACCEPTED;
+				//return NDIS_STATUS_NOT_ACCEPTED;
+				return 0;		//Thanks to Albert Jin.
 			}
 	//------------------------------WestChamber---------------------------------
 	//
