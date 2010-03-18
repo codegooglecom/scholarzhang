@@ -1,4 +1,5 @@
-#summary 如何以 RPM 套件方式安裝本軟體。
+#summary 如何以 RPM 套件方式安裝本軟體。（Fedora 發行版）
+#labels Fedora,RPM,SRPM,Install,doc
 
 = 前言 =
 
@@ -16,7 +17,22 @@
 
 當分割完成後，就會送到 RPMFusion 非官方 Fedora 源進行[http://rpmfusion.org/Contributors 入源審核]。
 
+（以下步驟為 Fedora 12 或以上適用，並不保證於其他 Fedora 舊版本或分支能順利實行。）
 
 = SRPM 安裝步驟 =
 
-(TBA)
+  # 請確認系統已安裝最新套件： kernel, kernel-headers, rpmdevtools, iptables-devel
+
+  # 重新起動主機。
+
+  # 如果之前沒有做過套件包裝工作，請以正常用戶登入終端機執行，以生成 ~/rpmbuild/* 包裝套件用文件夾：`rpmdev-setuptree`
+
+  # 下傳 SRPM 檔到 ~/rpmbuild/：`rpm -Uvh [SRPM 檔的下載地址]`
+
+  # 進入 ~/rpmbuild/SPECS，執行 RPM 編譯： `cd ~/rpmbuild/SPECS; rpmbuild -ba west-chamber.spec`
+
+  # 耐心等候，編譯完成會生成適合您現在的內核版本的 RPM： ~/rpmbuild/SRPMS/[系統Arch］/west-chamber-版本號-發表號.rpm
+
+  # 以正常方式安裝 RPM，以 root 權限在終端機執行： `rpm -Uvh ~/rpmbuild/SRPMS/[系統Arch］/west-chamber-版本號-發表號.rpm` （如果屬內核版本更新的重新編譯，在安裝時要加入 --force 選項，忽略版本號的檢查。）
+
+  # 安裝完成，具體使用請查閱相關使用文檔。
