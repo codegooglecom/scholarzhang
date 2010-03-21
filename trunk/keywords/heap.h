@@ -8,9 +8,9 @@ struct heap_t {
 	void *data;
 };
 
-static inline void heap_lift( heap_t * const hsub, int p ) {
+static inline void heap_lift( struct heap_t *const hsub, int p ) {
 	/* hsub == heap - 1, *(hsub + p) is the operated object */
-	heap_t orig;
+	struct heap_t orig;
 
 	if (p > 1) {
 		int n = p >> 1;
@@ -30,10 +30,10 @@ static inline void heap_lift( heap_t * const hsub, int p ) {
 	}
 }
 
-static inline void heap_sink( heap_t * const hsub, int p, const int size ) {
+static inline void heap_sink( struct heap_t *const hsub, int p, const int size ) {
 	/* hsub == heap - 1, *(hsub + p) is the operated object */
 	int min;
-	heap_t orig;
+	struct heap_t orig;
 
 	if ((min = p << 1) <= size) {
 		if ( (hsub + min)->time - (hsub + (min + 1))->time > 0 )
@@ -57,29 +57,29 @@ static inline void heap_sink( heap_t * const hsub, int p, const int size ) {
 	}
 }
 
-static inline void init_heap( heap_t * const heap, const int size ) {
+static inline void init_heap( struct heap_t *const heap, const int size ) {
 	int i;
 	for ( i = size / 2; i > 0; --i )
 		heap_sink(heap - 1, i, size);
 }
 
-static inline void heap_delmin( heap_t * const heap, int * const size ) {
+static inline void heap_delmin( struct heap_t *const heap, int *const size ) {
 	memcpy( heap, heap + (--*size), sizeof(struct heap_t) );
-	heap_sink( heap - 1, 1, size);
+	heap_sink( heap - 1, 1, *size);
 }
 
-static inline void heap_insert( heap_t * const heap, const long time,
-				 const void * const dst, int * const size ) {
+static inline void heap_insert( struct heap_t *const heap, const long time,
+				void *const data, int *const size ) {
 	(heap + *size)->time = time;
-	(heap + *size)->dst = dst;
+	(heap + *size)->data = data;
 	heap_lift( heap - 1, ++(*size) );
 }
 
-static inline void heap_delete( heap_t * const heap, const int p,
-				 int * const size ) {
+static inline void heap_delete( struct heap_t *const heap, const int p,
+				 int *const size ) {
 	memcpy( heap + p, heap + (--*size), sizeof(struct heap_t) );
 	heap_lift( heap - 1, p + 1 );
-	heap_sink( heap - 1, p + 1, size );
+	heap_sink( heap - 1, p + 1, *size );
 }
 
 #endif /* _HEAP_H_ */

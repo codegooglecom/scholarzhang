@@ -7,13 +7,15 @@ struct hash_t {
 	struct hash_t *next;
 	uint32_t da;
 	uint16_t dp;
-}
+};
 
 static inline uint32_t dst_hash(uint32_t da, uint16_t dp) {
 	long long tmp = (da % event_capa);
 	tmp = tmp * (dp + tmp) % event_capa;
 	return tmp;
 }
+
+static struct hash_t **hash = NULL;
 
 static inline struct hash_t **hash_insert(uint32_t da, uint16_t dp, struct conncontent *conn) {
 	struct hash_t *item = malloc(sizeof(struct hash_t));
