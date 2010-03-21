@@ -1,17 +1,17 @@
 CC = cc
 INCLUDES = -I.
-LIBS = -L. -lpthread `pcap_config --libs` `libnet-config --libs`
+LIBS = -L. -lpthread `pcap-config --libs` `libnet-config --libs` -lgfwkeyword
 CFLAGS = -Wall -Wextra -g
 
 all: url_keywords
 
 url_keywords: url_keywords.c libgfwkeyword.a gfw_keyword.h
-	$(CC) $(CFLAGS) -lgfwkeyword $(INCLUDES) -c $<
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIBS)
 
 lib: libgfwkeyword.a
 
 libgfwkeyword.a: gfw_keyword.o connmanager.o dstmaintain.o fingerprint.o
-	ar rcs libufwutil.a gfw_keyword.o connmanager.o dstmaintain.o fingerprint.o
+	ar rcs libgfwkeyword.a gfw_keyword.o connmanager.o dstmaintain.o fingerprint.o
 
 gfw_keyword.o: gfw_keyword.c gfw_keyword.h connmanager.h dstmaintain.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c $<
