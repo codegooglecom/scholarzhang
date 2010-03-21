@@ -5,8 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <pthread.h>
 #include <string.h>
+#include <pthread.h>
+#include <pcap.h>
 #include <libnet.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
@@ -17,7 +18,7 @@ static libnet_t *l = NULL;
 static char errbuf[LIBNET_ERRBUF_SIZE];
 static pcap_t *pd = NULL;
 static char pcap_errbuf[PCAP_ERRBUF_SIZE];
-static int linktype, linkoffset;
+static uint16_t linktype, linkoffset;
 
 #define STATUS_CHECK 0x08
 #define STATUS_TYPE1 0x10
@@ -50,9 +51,7 @@ struct conncontent {
 };
 
 #define ST_TO_HK_TYPE(status) (status >> 4)
-#define HK_TYPE_TO_ST(result) (result << 4)
-#define HK_TYPE1 1
-#define HK_TYPE2 2
+#define HK_TO_ST_TYPE(result) (result << 4)
 #define FP_TO_HK_TYPE(fingerprint) (fingerprint >> 8)
 
 static struct connlist_t {
@@ -69,8 +68,8 @@ static struct dstlist *dest = NULL;
 
 /* hash table maintanence */
 #include "dst_hash.c"
-static struct hash_t **hash = NULL;
-// hash has capacity = event_capa * 3
+// static struct hash_t **hash = NULL;
+/* defined above, hash has capacity = event_capa * 3 */
 
 static pthread_mutex_t mutex_conn, mutex_hash;
 static pthread_t send_p, recv_p;
@@ -99,6 +98,7 @@ static inline struct conncontent *new_conn() {
 	struct conncontent *conn = connlist.head;
 	if (conn)
 		connlist.head = *(struct conncontent **)connlist.head;
+	return conn;
 }
 
 static inline void del_conn(struct conncontent *conn) {
@@ -118,7 +118,7 @@ static inline void empty_connlist() {
 
 /* send and receive */
 static void *event_loop(void *running) {
-	conninfo *conn;
+	struct conncontent *conn;
 	char status;
 	char type;
 	libnet_ptag_t tcp = 0, ip = 0;
@@ -149,7 +149,7 @@ static void *event_loop(void *running) {
 			usleep(1000 * time);
 		conn = event->data;
 		status = conn->status & STATUS_MASK;
-		type = ST_TO_HK_TYPE(conn->type);
+		type = ST_TO_HK_TYPE(conn->status);
 
 		if (status == 5) {
 			char result = conn->hit;
@@ -158,10 +158,10 @@ static void *event_loop(void *running) {
 				   if it does not work with this GFW
 				   type, we will set status = 0
 				   again */
-				return_dst_delete_hash(dest, conn->dst, type, STATUS_CHECK | HK_TYPE_TO_ST(result), conn->hash);
+				return_dst_delete_hash(dest, conn->dst, type, STATUS_CHECK | HK_TO_ST_TYPE(result), conn->hash);
 				if (result & type) {
 					// GFW's working, so this is not a keyword
-					*result = 0;
+					*conn->result = 0;
 					conn->callback(result, conn->arg);
 					heap_delmin(event, &event_count);
 					del_conn(conn);
@@ -183,8 +183,8 @@ static void *event_loop(void *running) {
 			}
 			else {
 				// Hit
-				return_dst_delete_hash(dest, conn->dst, type, HK_TYPE_TO_ST(result), conn->hash);
-				*result = type;
+				return_dst_delete_hash(dest, conn->dst, type, HK_TO_ST_TYPE(result), conn->hash);
+				*conn->result = type;
 				conn->callback(result, conn->arg);
 				heap_delmin(event, &event_count);
 				del_conn(conn);
@@ -208,7 +208,7 @@ static void *event_loop(void *running) {
 		case 1:
 			conn->sp = libnet_get_prand(LIBNET_PR16) + 32768;
 			conn->seq = libnet_get_prand(32);
-			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq++, 0, TH_SYN, 0, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
+			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq++, 0, TH_SYN, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
 			tot = LIBNET_IPV4_H + LIBNET_TCP_H;
 			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
 			for (time = 0; time < times; ++time) {
@@ -216,7 +216,7 @@ static void *event_loop(void *running) {
 					fprintf(stderr, "libnet_write: %s\n", errbuf);
 				else {
 					if (pps) usleep(1000000 / pps);
-					if (kps) usleep(1000 * tot / ksp);
+					if (kps) usleep(1000 * tot / kps);
 				}
 			}
 			conn->status = (conn->status & ~STATUS_MASK) | 2;
@@ -224,7 +224,7 @@ static void *event_loop(void *running) {
 
 		case 2:
 			conn->ack = libnet_get_prand(32) + 1;
-			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq, conn->ack, TH_ACK, 0, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
+			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq, conn->ack, TH_ACK, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
 			tot = LIBNET_IPV4_H + LIBNET_TCP_H;
 			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
 			for (time = 0; time < times; ++time) {
@@ -232,7 +232,7 @@ static void *event_loop(void *running) {
 					fprintf(stderr, "libnet_write: %s\n", errbuf);
 				else {
 					if (pps) usleep(1000000 / pps);
-					if (kps) usleep(1000 * tot / ksp);
+					if (kps) usleep(1000 * tot / kps);
 				}
 			}
 			conn->next = 0;
@@ -246,7 +246,7 @@ static void *event_loop(void *running) {
 					piece = tcp_mss;
 				else
 					conn->status = (conn->status & ~STATUS_MASK) | 4;
-				libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, TH_ACK|TH_PUSH, 0, 16384, 0, 0, LIBNET_TCP_H + piece, ((conn->status & STATUS_CHECK)?youtube:conn->content) + next, piece, l, tcp);
+				libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, TH_ACK|TH_PUSH, 16384, 0, 0, LIBNET_TCP_H + piece, ((conn->status & STATUS_CHECK)?youtube:conn->content) + conn->next, piece, l, tcp);
 				tot = LIBNET_IPV4_H + LIBNET_TCP_H + piece;
 				libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
 				for (time = 0; time < times; ++time) {
@@ -254,16 +254,16 @@ static void *event_loop(void *running) {
 						fprintf(stderr, "libnet_write: %s\n", errbuf);
 					else {
 						if (pps) usleep(1000000 / pps);
-						if (kps) usleep(1000 * tot / ksp);
+						if (kps) usleep(1000 * tot / kps);
 					}
 				}
-				next += piece;
+				conn->next += piece;
 			}
 			break;
 
 		case 4:
 			conn->seq = libnet_get_prand(32);
-			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq++, 0, TH_SYN, 0, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
+			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq++, 0, TH_SYN, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
 			tot = LIBNET_IPV4_H + LIBNET_TCP_H;
 			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
 			for (time = 0; time < times; ++time) {
@@ -271,7 +271,7 @@ static void *event_loop(void *running) {
 					fprintf(stderr, "libnet_write: %s\n", errbuf);
 				else {
 					if (pps) usleep(1000000 / pps);
-					if (kps) usleep(1000 * tot / ksp);
+					if (kps) usleep(1000 * tot / kps);
 				}
 			}
 			conn->status = (conn->status & ~STATUS_MASK) | 5;
@@ -287,11 +287,17 @@ static void *event_loop(void *running) {
 	unlock:
 		pthread_mutex_unlock(&mutex_conn);
 	}
+
+	while (event_count) {
+
+	}
+
+	return NULL;
 }
 
-static void *listen(void *running) {
+static void *listen_for_gfw(void *running) {
 	int ret;
-	pcap_pkthdr *pkthdr;
+	struct pcap_pkthdr *pkthdr;
 	uint8_t *wire;
 	struct tcphdr *tcph;
 	struct iphdr *iph;
@@ -304,20 +310,20 @@ static void *listen(void *running) {
 		case DLT_EN10MB:
 			if (pkthdr->caplen < 14)
 				continue;
-			if (data[12] == 8 && data[13] == 0) {
+			if (wire[12] == 8 && wire[13] == 0) {
 				linkoffset = 14;
-			} else if (data[12] == 0x81 && data[13] == 0) {
+			} else if (wire[12] == 0x81 && wire[13] == 0) {
 				linkoffset = 18;
 			} else
-				return;
+				continue;
 			break;
 		}
 		if (pkthdr->caplen < linkoffset)
 			continue;
 		iph = (struct iphdr *)(wire + linkoffset);
-		tcph = (struct tcphdr *)(wire + linkoffset + iph->ip_hl << 2);
+		tcph = (struct tcphdr *)(wire + linkoffset + (iph->ihl << 2));
 
-		conn = hash_match(dst_hash(ntohl(iph->saddr), ntohs(tcph->source)));
+		conn = hash_match(ntohl(iph->saddr), ntohs(tcph->source));
 		if (conn == NULL || conn->sp != ntohs(tcph->dest))
 			continue;
 		type = FP_TO_HK_TYPE(gfw_fingerprint(wire + linkoffset));
@@ -355,10 +361,12 @@ static void *listen(void *running) {
 			}
 		}
 	}
+
+	return NULL;
 }
 
 /* connmanager */
-int connmanager_config(int _control_wait, int _times, int _time_interval, int _expire_timeout, int _tcp_mss, int _kps, int _pps) {
+void connmanager_config(int _control_wait, int _times, int _time_interval, int _expire_timeout, int _tcp_mss, int _kps, int _pps) {
 	if (_control_wait > 0)
 		control_wait = _control_wait;
 	if (_times > 0)
@@ -375,8 +383,12 @@ int connmanager_config(int _control_wait, int _times, int _time_interval, int _e
 		pps = _pps;
 }
 
-int add_context(const char * const content, const int length, const char * const result, const int type, callback_f cb, void *arg) {
+int add_context(char * const content, const int length, char * const result, const int type, callback_f cb, void *arg) {
 	struct conncontent *conn;
+
+	if (event_count == event_capa)
+		return -1;
+	pthread_mutex_lock(&mutex_conn);
 
 	/* new conn */
 	conn = new_conn();
@@ -392,9 +404,6 @@ int add_context(const char * const content, const int length, const char * const
 	conn->callback = cb;
 	conn->arg = arg;
 
-	assert( event_count < MAX_CONN ); // queue never full
-//	while (event_count == MAX_CONN);
-	pthread_mutex_lock(&mutex_conn);
 	heap_insert(event, gettime(), conn, &event_count);
 	pthread_mutex_unlock(&mutex_conn);
 	return 0;
@@ -402,7 +411,7 @@ int add_context(const char * const content, const int length, const char * const
 
 int connmanager_run() {
 	running = 0;
-	if (pthread_create(&recv_p, NULL, listen, &running)) {
+	if (pthread_create(&recv_p, NULL, listen_for_gfw, &running)) {
 		perror("recv thread creation");
 		running = 1;
 		return -1;
@@ -414,6 +423,7 @@ int connmanager_run() {
 		pthread_join(recv_p, &ret);
 		return -1;
 	}
+	return 0;
 }
 
 void connmanager_finalize() {
@@ -430,7 +440,7 @@ void connmanager_finalize() {
 		libnet_destroy(l);
 }
 
-static int connmanager_sig(int sig) {
+void connmanager_sig(int sig) {
 	void *ret;
 
 	running = 2;
@@ -497,24 +507,27 @@ int connmanager_init(char *device, char *ip, struct dstlist *list, int capa) {
 	}
 	if (ip == NULL) {
 		sa = libnet_get_ipaddr4(l);
-		ip = inet_ntoa(*(struct in_sa *)&sa);
+		ip = inet_ntoa(*(struct in_addr *)&sa);
 	}
 	else
 		sa = inet_addr(ip);
 	sa = ntohs(sa);
 
-	libnet_seed_prand(l) == -1;
-	pd = pcap_open_live((device?device:libnet_getdevice(l)), 100, 0, control_wait);
-	char filter_exp[50] = "tcp and dst ";
-	struct bpf_program fp;
-	strcat(filter_exp, ip);
+	if (libnet_seed_prand(l) == -1) {
+		fprintf(stderr, "libnet_seed_prand: %s\n", errbuf);
+		goto quit;
+	}
+	pd = pcap_open_live((device?device:libnet_getdevice(l)), 100, 0, control_wait, pcap_errbuf);
 	if (pd == NULL) {
 		fprintf(stderr, "pcap_open_live: %s\n", pcap_errbuf);
 		goto quit;
 	}
+	char filter_exp[50] = "tcp and dst ";
+	struct bpf_program fp;
+	strcat(filter_exp, ip);
 	if ( pcap_compile(pd, &fp, filter_exp, 1, 0) == -1
 	     || pcap_setfilter(pd, &fp) == -1 ) {
-		pcap_perror(handle, "pcap");
+		pcap_perror(pd, "pcap");
 		goto quit;
 	}
 

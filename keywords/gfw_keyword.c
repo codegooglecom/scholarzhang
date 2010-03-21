@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
-int keyword_read_config(char *line, char *device, char *ip, int *maxconn, int *maxdst, int *control_wait, int *times, int *time_interval, int *expire_timeout, int *tcp_mss, int *kps, int *pps) {
+void keyword_read_config(char *line, char *device, char *ip, int *maxconn, int *maxdst, int *control_wait, int *times, int *time_interval, int *expire_timeout, int *tcp_mss, int *kps, int *pps) {
 	char par[20];
 	while (sscanf(line, "%s", par)) {
 		if (strcmp(par, "i") == 0 || strcmp(par, "device") == 0)
@@ -13,6 +13,8 @@ int keyword_read_config(char *line, char *device, char *ip, int *maxconn, int *m
 			sscanf(line, "%d", maxconn);
 		if (strcmp(par, "maxdst") == 0)
 			sscanf(line, "%d", maxdst);
+		if (strcmp(par, "w") == 0)
+			sscanf(line, "%d", control_wait);
 		if (strcmp(par, "x") == 0)
 			sscanf(line, "%d", times);
 		if (strcmp(par, "t") == 0 || strcmp(par, "interval") == 0)
@@ -35,21 +37,21 @@ int keyword_read_config_file(char *file, char *device, char *ip, int *maxconn, i
 		return -1;
 	}
 
-#define LINE_LEN 1000;
+#define LINE_LEN 1000
 	char line[LINE_LEN];
-	int i, j, l;
+	int i;
 
 	line[LINE_LEN - 1] = 1;
 	for (i = 1; fgets(line, 1000, fp); ++i) {
 		if (line[LINE_LEN - 1] == 0 && line[LINE_LEN - 2] != '\n')
-			fpirntf(stderr, "keyword_read_config: line #%d too long\n", i);
+			fprintf(stderr, "keyword_read_config: line #%d too long\n", i);
 		if (line[0] == '#')
 			continue;
 		keyword_read_config(line+1, device, ip, maxconn, maxdst, control_wait, times, time_interval, expire_timeout, tcp_mss, kps, pps);
 	}
 
-	if (maxdst == 0)
-		maxdst == DEFAULT_DST;
+	if (*maxdst == 0)
+		*maxdst = DEFAULT_DST;
 
 	return 0;
 }
