@@ -91,6 +91,7 @@ static inline void return_dst_delete_hash(struct dstlist *const list, struct dst
 		return_type2(list, dst, status);
 	if (hash)
 		hash_delete(hash);
+	// mutex_hash is operated outside.
 }
 
 #endif /* _CONNMANAGER_ */

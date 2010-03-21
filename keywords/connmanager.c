@@ -117,6 +117,24 @@ static inline void empty_connlist() {
 }
 
 /* send and receive */
+
+static inline void clear_queue() {
+	struct conncontent *conn;
+	
+	pthread_mutex_lock(&mutex_conn);
+	while (event_count) {
+		conn = event->data;
+		if (conn->dst) {
+			pthread_mutex_lock(&mutex_hash);
+			return_dst_delete_hash(dest, conn->dst, ST_TO_HK_TYPE(conn->status), HK_TO_ST_TYPE(conn->hit), conn->hash);
+			pthread_mutex_unlock(&mutex_hash);
+		}
+		heap_delmin(event, &event_count);
+		del_conn(conn);
+	}
+	pthread_mutex_unlock(&mutex_conn);
+}
+
 static void *event_loop(void *running) {
 	struct conncontent *conn;
 	char status;
@@ -158,7 +176,9 @@ static void *event_loop(void *running) {
 				   if it does not work with this GFW
 				   type, we will set status = 0
 				   again */
+				pthread_mutex_lock(&mutex_hash);
 				return_dst_delete_hash(dest, conn->dst, type, STATUS_CHECK | HK_TO_ST_TYPE(result), conn->hash);
+				pthread_mutex_unlock(&mutex_hash);
 				if (result & type) {
 					// GFW's working, so this is not a keyword
 					*conn->result = 0;
@@ -183,7 +203,9 @@ static void *event_loop(void *running) {
 			}
 			else {
 				// Hit
+				pthread_mutex_lock(&mutex_hash);
 				return_dst_delete_hash(dest, conn->dst, type, HK_TO_ST_TYPE(result), conn->hash);
+				pthread_mutex_unlock(&mutex_hash);
 				*conn->result = type;
 				conn->callback(result, conn->arg);
 				heap_delmin(event, &event_count);
@@ -202,8 +224,11 @@ static void *event_loop(void *running) {
 				event->time += control_wait;
 				goto next;
 			}
-			else
+			else {
+				pthread_mutex_lock(&mutex_hash);
 				conn->hash = hash_insert(conn->dst->da, conn->dst->dport, conn);
+				pthread_mutex_unlock(&mutex_hash);
+			}
 
 		case 1:
 			conn->sp = libnet_get_prand(LIBNET_PR16) + 32768;
@@ -288,9 +313,7 @@ static void *event_loop(void *running) {
 		pthread_mutex_unlock(&mutex_conn);
 	}
 
-	while (event_count) {
-
-	}
+	clear_queue();
 
 	return NULL;
 }
@@ -323,7 +346,9 @@ static void *listen_for_gfw(void *running) {
 		iph = (struct iphdr *)(wire + linkoffset);
 		tcph = (struct tcphdr *)(wire + linkoffset + (iph->ihl << 2));
 
+		pthread_mutex_lock(&mutex_hash);
 		conn = hash_match(ntohl(iph->saddr), ntohs(tcph->source));
+		pthread_mutex_unlock(&mutex_hash);
 		if (conn == NULL || conn->sp != ntohs(tcph->dest))
 			continue;
 		type = FP_TO_HK_TYPE(gfw_fingerprint(wire + linkoffset));
@@ -384,13 +409,12 @@ void connmanager_config(int _control_wait, int _times, int _time_interval, int _
 }
 
 int add_context(char * const content, const int length, char * const result, const int type, callback_f cb, void *arg) {
-	struct conncontent *conn;
-
 	if (event_count == event_capa)
 		return -1;
 	pthread_mutex_lock(&mutex_conn);
 
 	/* new conn */
+	struct conncontent *conn;
 	conn = new_conn();
 	if (conn == NULL)
 		return -1;
@@ -406,6 +430,10 @@ int add_context(char * const content, const int length, char * const result, con
 
 	heap_insert(event, gettime(), conn, &event_count);
 	pthread_mutex_unlock(&mutex_conn);
+	if (running != 0) {
+		clear_queue();
+		return -2;
+	}
 	return 0;
 }
 
