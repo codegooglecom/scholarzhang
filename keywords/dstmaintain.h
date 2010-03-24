@@ -14,11 +14,12 @@ extern inline long gettime() {
 	return (tv.tv_sec % DAY_S) * 1000 + tv.tv_usec / 1000;
 }
 
+#define MAX_CAND 1000
 #define DEFAULT_DST 500000
 
 struct port_range {
-	uint32_t addr;
-	uint16_t portL, portR;
+	uint32_t addrL, addrR;
+	uint16_t portL, portR, port;
 };
 
 struct dstinfo;
@@ -50,7 +51,9 @@ struct dstlist {
 	int removed_type1, removed_type2;
 };
 
-struct dstlist *new_dstlist(const int capacity);
+struct port_range *new_candlist(char *candlist, int *count);
+
+struct dstlist *new_dstlist(int capacity);
 void free_dstlist(struct dstlist *const list);
 int init_dstlist(struct dstlist *const list, struct port_range *cand, int count);
 void dstlist_delete( struct dstlist *const list, struct dstinfo *const dst);
