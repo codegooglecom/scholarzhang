@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 
 long gettime() {
 	struct timeval tv;
@@ -174,10 +175,79 @@ inline void type2_delete(struct idle_t *const heap, const int p,
 	type2_sink( heap + 1, p + 1, *size );
 }
 
+/* port_range */
+struct port_range *new_candlist(char *candlist, int *count) {
+	struct port_range *cand;
+	int status, j;
+#define P_LEN 20
+	char c[P_LEN];
+	char *p, end;
+
+	if ((cand = malloc(MAX_CAND * sizeof(struct port_range))) && c != NULL) {
+		*count = 0;
+		j = 0;
+		for (p = candlist, end = 0; end == 0; ++p)
+			switch (*p) {
+			case ':':
+				c[j] = '\0';
+				cand[*count].addrR = inet_network(c);
+				if ((status & 1) == 0)
+					cand[*count].addrL = cand[*count].addrR;
+				status = 2;
+				j = 0;
+				break;
+			case '-':
+				c[j] = '\0';
+				if (status & 2)
+					cand[*count].portL = atoi(c);
+				else
+					cand[*count].addrL = inet_network(c);
+				j = 0;
+				++status;
+				break;
+			case ' ':
+			case '\t':
+				if (status != 3)
+					break;
+				else
+					end = 1;
+			case '\0':
+				end = 1;
+			case ',':
+				c[j] = '\0';
+				cand[*count].portR = atoi(c);
+				if ((status & 1) == 0)
+					cand[*count].portL = cand[*count].portR;
+				++(*count);
+				j = 0;
+				status = 0;
+				break;
+			default:
+				c[j++] = *p;
+				if (j == P_LEN)
+					goto error;
+#undef P_LEN
+			}
+
+		if (status != 0)
+			goto error;
+
+		struct port_range *p = realloc(cand, *count);
+		if (p)
+			return p;
+	}
+	return cand;
+error:
+	free(cand);
+	return NULL;
+}
+
 /* dstlist maintenance */
-struct dstlist *new_dstlist(const int capacity) {
+struct dstlist *new_dstlist(int capacity) {
 	struct dstlist *list;
 
+	if (capacity == 0)
+		capacity = DEFAULT_DST;
 	list = malloc(sizeof(struct dstlist));
 	if (list) {
 		list->capacity = capacity;
@@ -223,46 +293,54 @@ inline void fill_dstlist_without_maintain_heap(struct dstlist *const list,
 	if ( (i = list->cand_count - 1) < 0 )
 		return;
 
-	int j, k, l;
+	int j, k, l, m;
 	long inittime = gettime();
 	struct dstinfo *newdst;
 	struct idle_t *idle;
 
 	do {
-		k = list->candidates[i].addr;
-		l = list->candidates[i].portL;
-		for ( j = list->candidates[i].portR; j >= l; --j ) {
-			newdst = list->head;
-			list->head = *(struct dstinfo **)(list->head);
-			newdst->da = k;
-			newdst->used = 0;
-			newdst->dport = j;
-			newdst->type = (HK_TYPE1 | HK_TYPE2);
-
-			idle = list->idle_type1 + list->count_type1;
-			idle->dst = newdst;
-			idle->time = inittime;
-			++list->count_type1;
-			idle = list->idle_type2 - list->count_type2;
-			idle->dst = newdst;
-			idle->time = inittime;
-			++list->count_type2;
-
-			newdst->pos_type1 = list->count_type1;
-			newdst->pos_type2 = list->count_type2;
-
-			if (--n == 0) {
-				if (j == l)
-					list->cand_count = i;
-				else  {
-					list->cand_count = i + 1;
-					list->candidates[i].portR = j - 1;
-				}
-				return;
+		m = list->candidates[i].addrL;
+		for ( k = list->candidates[i].addrR; k >= m; --k ) {
+			l = list->candidates[i].portL;
+			for ( j = list->candidates[i].port; j >= l; --j ) {
+				newdst = list->head;
+				list->head = *(struct dstinfo **)(list->head);
+				newdst->da = k;
+				newdst->used = 0;
+				newdst->dport = j;
+				newdst->type = (HK_TYPE1 | HK_TYPE2);
+				
+				idle = list->idle_type1 + list->count_type1;
+				idle->dst = newdst;
+				idle->time = inittime;
+				++list->count_type1;
+				idle = list->idle_type2 - list->count_type2;
+				idle->dst = newdst;
+				idle->time = inittime;
+				++list->count_type2;
+				
+				newdst->pos_type1 = list->count_type1;
+				newdst->pos_type2 = list->count_type2;
+				
+				if (--n == 0)
+					goto out;
 			}
 		}
 		--i;
 	} while (i >= 0);
+ out:
+	if (j == l) {
+		if (--k < m)
+			--i;
+		else {
+			list->candidates[i].addrR = k;
+			list->candidates[i].port = list->candidates[i].portR;
+		}
+	}
+	else
+		list->candidates[i].port = j - 1;
+	list->cand_count = i + 1;
+
 	list->removed_type1 = list->capacity - list->count_type1;
 	list->removed_type2 = list->capacity - list->count_type2;
 }

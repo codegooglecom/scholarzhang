@@ -79,13 +79,13 @@ static int times = 3;
 static int time_interval = 30;
 static int expire_timeout = 150;
 static int tcp_mss = 1300;
-static int kps = 0;
+static double kps = 0;
 static int pps = 0;
 #define GFW_TIMEOUT 90000 // 90 sec
 
 static uint32_t sa;
 
-static char running;
+static char running = -1;
 
 static const char youtube[] = "GET http://www.youtube.com HTTP/1.1\r\n\r\n";
 static const int  youtube_len = sizeof(youtube);
@@ -120,7 +120,7 @@ static inline void empty_connlist() {
 
 static inline void clear_queue() {
 	struct conncontent *conn;
-	
+
 	pthread_mutex_lock(&mutex_conn);
 	while (event_count) {
 		conn = event->data;
@@ -238,10 +238,10 @@ static void *event_loop(void *running) {
 			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
 			for (time = 0; time < times; ++time) {
 				if (-1 == libnet_write(l))
-					fprintf(stderr, "libnet_write: %s\n", errbuf);
+					fputs(errbuf, stderr);
 				else {
 					if (pps) usleep(1000000 / pps);
-					if (kps) usleep(1000 * tot / kps);
+					if (kps >= 1) usleep(1000 * tot / kps);
 				}
 			}
 			conn->status = (conn->status & ~STATUS_MASK) | 2;
@@ -254,10 +254,10 @@ static void *event_loop(void *running) {
 			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
 			for (time = 0; time < times; ++time) {
 				if (-1 == libnet_write(l))
-					fprintf(stderr, "libnet_write: %s\n", errbuf);
+					fputs(errbuf, stderr);
 				else {
 					if (pps) usleep(1000000 / pps);
-					if (kps) usleep(1000 * tot / kps);
+					if (kps >= 1) usleep(1000 * tot / kps);
 				}
 			}
 			conn->next = 0;
@@ -276,10 +276,10 @@ static void *event_loop(void *running) {
 				libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
 				for (time = 0; time < times; ++time) {
 					if (-1 == libnet_write(l))
-						fprintf(stderr, "libnet_write: %s\n", errbuf);
+						fputs(errbuf, stderr);
 					else {
 						if (pps) usleep(1000000 / pps);
-						if (kps) usleep(1000 * tot / kps);
+						if (kps >= 1) usleep(1000 * tot / kps);
 					}
 				}
 				conn->next += piece;
@@ -293,10 +293,10 @@ static void *event_loop(void *running) {
 			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
 			for (time = 0; time < times; ++time) {
 				if (-1 == libnet_write(l))
-					fprintf(stderr, "libnet_write: %s\n", errbuf);
+					fprintf(errbuf, stderr);
 				else {
 					if (pps) usleep(1000000 / pps);
-					if (kps) usleep(1000 * tot / kps);
+					if (kps >= 1) usleep(1000 * tot / kps);
 				}
 			}
 			conn->status = (conn->status & ~STATUS_MASK) | 5;
@@ -391,7 +391,7 @@ static void *listen_for_gfw(void *running) {
 }
 
 /* connmanager */
-void connmanager_config(int _control_wait, int _times, int _time_interval, int _expire_timeout, int _tcp_mss, int _kps, int _pps) {
+void connmanager_config(int _control_wait, int _times, int _time_interval, int _expire_timeout, int _tcp_mss, double _kps, int _pps) {
 	if (_control_wait > 0)
 		control_wait = _control_wait;
 	if (_times > 0)
@@ -402,10 +402,14 @@ void connmanager_config(int _control_wait, int _times, int _time_interval, int _
 		expire_timeout = _expire_timeout;
 	if (_tcp_mss > 0)
 		tcp_mss = _tcp_mss;
-	if (_kps >= 0)
+	if (_kps >= 1) {
 		kps = _kps;
-	if (_pps >= 0)
+		pps = 0;
+	}
+	if (_pps >= 0) {
+		kps = 0;
 		pps = _pps;
+	}
 }
 
 int add_context(char * const content, const int length, char * const result, const int type, callback_f cb, void *arg) {
@@ -468,24 +472,37 @@ void connmanager_finalize() {
 		libnet_destroy(l);
 }
 
-void connmanager_sig(int sig) {
+void connmanager_abort() {
 	void *ret;
 
-	running = 2;
-	pthread_join(recv_p, &ret);
-	pthread_join(send_p, &ret);
-	connmanager_finalize();
+	if (running == 0) {
+		running = 2;
+		pthread_join(recv_p, &ret);
+		pthread_join(send_p, &ret);
+	}
 }
 
 void connmanager_finish() {
 	void *ret;
 
-	running = 1;
-	pthread_join(recv_p, &ret);
-	pthread_join(send_p, &ret);
+	if (running == 0) {
+		running = 1;
+		pthread_join(recv_p, &ret);
+		pthread_join(send_p, &ret);
+	}
 }
 
 int connmanager_init(char *device, char *ip, struct dstlist *list, int capa) {
+	if (device == NULL || device[0] == '\0') {
+		pcap_if_t *alldevsp;
+		if (pcap_findalldevs(&alldevsp, pcap_errbuf) != 0) {
+			fprintf(stderr, "pcap_findalldevs: %s", pcap_errbuf);
+			return -1;
+		}
+		strcpy(device, alldevsp->name);
+		pcap_freealldevs(alldevsp);
+	}
+
 	if (pthread_mutex_init(&mutex_conn, NULL)) {
 		perror("pthread_mutex_init");
 		return -1;
@@ -493,19 +510,6 @@ int connmanager_init(char *device, char *ip, struct dstlist *list, int capa) {
 	if (pthread_mutex_init(&mutex_hash, NULL)) {
 		pthread_mutex_destroy(&mutex_conn);
 		perror("pthread_mutex_init");
-		return -1;
-	}
-
-	if (signal(SIGINT, connmanager_sig) == SIG_ERR) {
-		perror("signal");
-		return -1;
-	}
-	if (signal(SIGTERM, connmanager_sig) == SIG_ERR) {
-		perror("signal");
-		return -1;
-	}
-	if (signal(SIGHUP, SIG_IGN) == SIG_ERR) {
-		perror("signal");
 		return -1;
 	}
 
@@ -526,26 +530,26 @@ int connmanager_init(char *device, char *ip, struct dstlist *list, int capa) {
 		goto quit;
 
 	empty_connlist();
-	memset(hash, 0, 3 * event_capa * sizeof(struct hash_t));
+	memset(hash, 0, 3 * event_capa * sizeof(struct hash_t *));
 	event_count = 0;
 
 	if ((l = libnet_init(LIBNET_RAW4, device, errbuf)) == NULL) {
-		fprintf(stderr, "libnet_init: %s\n", errbuf);
+		fputs(errbuf, stderr);
 		goto quit;
 	}
-	if (ip == NULL) {
+	if (ip == NULL || ip[0] == '\0') {
 		sa = libnet_get_ipaddr4(l);
 		ip = inet_ntoa(*(struct in_addr *)&sa);
 	}
 	else
 		sa = inet_addr(ip);
-	sa = ntohs(sa);
+	sa = ntohl(sa);
 
 	if (libnet_seed_prand(l) == -1) {
-		fprintf(stderr, "libnet_seed_prand: %s\n", errbuf);
+		fputs(errbuf, stderr);
 		goto quit;
 	}
-	pd = pcap_open_live((device?device:libnet_getdevice(l)), 100, 0, control_wait, pcap_errbuf);
+	pd = pcap_open_live(device, 100, 0, control_wait, pcap_errbuf);
 	if (pd == NULL) {
 		fprintf(stderr, "pcap_open_live: %s\n", pcap_errbuf);
 		goto quit;
