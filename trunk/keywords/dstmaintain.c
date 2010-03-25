@@ -42,25 +42,25 @@ inline void type1_sink(struct idle_t *const hsub, int p, const int size) {
 	int min;
 	struct idle_t orig;
 
-	if ((min = p << 1) <= size) {
+	if ((min = p << 1) < size) {
 		if ( (hsub + min)->time - (hsub + (min + 1))->time > 0 )
 			++min;
 	}
-	else
-		++min;
+	if (min > size)
+		return;
 	if ( (hsub + p)->time - (hsub + min)->time > 0 ) {
 		memcpy(&orig, hsub + p, sizeof(struct idle_t));
 		do {
 			memcpy(hsub + p, hsub + min, sizeof(struct idle_t));
 			(hsub + p)->dst->pos_type1 = p;
 			p = min;
-			if ((min = p << 1) <= size) {
+			if ((min = p << 1) < size) {
 				if ( (hsub + min)->time - (hsub + (min + 1))->time
 				     > 0 )
 					++min;
 			}
-			else
-				++min;
+			if (min > size)
+				break;
 		} while ( orig.time - (hsub + min)->time > 0 );
 		memcpy(hsub + p, &orig, sizeof(struct idle_t));
 		(hsub + p)->dst->pos_type1 = p;
@@ -123,25 +123,25 @@ inline void type2_sink(struct idle_t *const hsub, int p, const int size) {
 	int min;
 	struct idle_t orig;
 
-	if ((min = p << 1) <= size) {
+	if ((min = p << 1) < size) {
 		if ( (hsub - min)->time - (hsub - (min + 1))->time > 0 )
 			++min;
 	}
-	else
-		++min;
+	if (min > size)
+		return;
 	if ( (hsub - p)->time - (hsub - min)->time > 0 ) {
 		memcpy(&orig, hsub - p, sizeof(struct idle_t));
 		do {
 			memcpy(hsub - p, hsub - min, sizeof(struct idle_t));
 			(hsub - p)->dst->pos_type2 = p;
 			p = min;
-			if ((min = p << 1) <= size) {
+			if ((min = p << 1) < size) {
 				if ( (hsub - min)->time - (hsub - (min + 1))->time
 				     > 0 )
 					++min;
 			}
-			else
-				++min;
+			if (min > size)
+				break;
 		} while ( orig.time - (hsub - min)->time > 0 );
 		memcpy(hsub - p, &orig, sizeof(struct idle_t));
 		(hsub - p)->dst->pos_type2 = p;
@@ -232,13 +232,16 @@ struct port_range *new_candlist(char *candlist, int *count) {
 		if (status != 0)
 			goto error;
 
-		struct port_range *p = realloc(cand, *count);
+		struct port_range *p = realloc(cand, *count * sizeof(struct port_range));
 		if (p)
 			return p;
 	}
+	else
+		perror("new_candlist");
 	return cand;
 error:
 	free(cand);
+	*count = 0;
 	return NULL;
 }
 
@@ -263,14 +266,15 @@ struct dstlist *new_dstlist(int capacity) {
 			return NULL;
 		}
 		list->idle_type2 = list->idle_type1 + 3 * capacity - 1;
+		list->candidates = NULL;
 	}
 	return list;
 }
 
 void free_dstlist(struct dstlist *const list) {
-	free(list->candidates);
 	free(list->data);
 	free(list->idle_type1);
+	free(list->candidates);
 	free(list);
 }
 
@@ -279,7 +283,7 @@ inline void empty_dstlist(struct dstlist *const list) {
 
 	list->head = list->data + 2 * list->capacity - 1;
 	*(struct dstinfo **)(list->head) = NULL;
-	while (list->head >= list->data) {
+	while (list->head > list->data) {
 		last = list->head;
 		*(struct dstinfo **)(list->head = last - 1) = last;
 	}
@@ -293,7 +297,8 @@ inline void fill_dstlist_without_maintain_heap(struct dstlist *const list,
 	if ( (i = list->cand_count - 1) < 0 )
 		return;
 
-	int j, k, l, m;
+	int j, l;
+	uint32_t k, m;
 	long inittime = gettime();
 	struct dstinfo *newdst;
 	struct idle_t *idle;
@@ -329,7 +334,7 @@ inline void fill_dstlist_without_maintain_heap(struct dstlist *const list,
 		--i;
 	} while (i >= 0);
  out:
-	if (j == l) {
+	if (j < l) {
 		if (--k < m)
 			--i;
 		else {

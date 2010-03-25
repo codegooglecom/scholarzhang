@@ -35,23 +35,23 @@ static inline void heap_sink( struct heap_t *const hsub, int p, const int size )
 	int min;
 	struct heap_t orig;
 
-	if ((min = p << 1) <= size) {
+	if ((min = p << 1) < size) {
 		if ( (hsub + min)->time - (hsub + (min + 1))->time > 0 )
 			++min;
 	}
-	else
-		++min;
+	if (min > size)
+		return;
 	if ( (hsub + p)->time - (hsub + min)->time > 0 ) {
 		memcpy(&orig, hsub + p, sizeof(struct heap_t));
 		do {
 			memcpy(hsub + p, hsub + min, sizeof(struct heap_t));
 			p = min;
-			if ((min = p << 1) <= size) {
+			if ((min = p << 1) < size) {
 				if ( (hsub + min)->time - (hsub + (min + 1))->time > 0)
 					++min;
 			}
-			else
-				++min;
+			if (min > size)
+				break;
 		} while ( orig.time - (hsub + min)->time > 0 );
 		memcpy(hsub + p, &orig, sizeof(struct heap_t));
 	}

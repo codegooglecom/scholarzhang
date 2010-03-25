@@ -18,6 +18,7 @@ struct dstlist *dest;
 
 static inline void quit() {
 	free_dstlist(dest);
+	free(cand);
 	connmanager_finalize();
 }
 
@@ -34,23 +35,12 @@ int main(int argc, char *argv[]) {
 	while ((opt = getopt(argc, argv, "i:s:f:h")) != -1) {
 		switch (opt) {
 		case 'i':
-			strncpy(device, optarg, 100);
-			if (device[99]) {
-				fprintf(stderr, "device name too long\n");
-				return 1;
-			}
-			break;
 		case 's':
-			strncpy(ip, optarg, 100);
-			if (ip[99]) {
-				fprintf(stderr, "IP too long\n");
-				return 1;
-			}
 			break;
 		case 'f':
 			strncpy(config_file, optarg, 1000);
 			if (config_file[999]) {
-				fprintf(stderr, "config_file name too long\n");
+				fputs("config_file name too long\n", stderr);
 				return 1;
 			}
 			break;
@@ -60,17 +50,19 @@ int main(int argc, char *argv[]) {
 			       "# %s [OPTIONS]\n"
 			       "  -i <device>      : network interface used for sending and receiving.\n"
 			       "  -f <config_file> : configuration file name.\n"
-			       "  -s <ip addr>     : the source ip address of the current machine.\n"
-			       "[SYNTAX]\n"
-			       "LINE     = [MODE \" \"] URL | MODE | \" \" OPTIONS\n"
-			       "MODE     = \"s\" | \"ms\" | \"m\"\n"
-			       "          # s means single keyword\n"
-			       "          # ms means multiple simple keywords\n"
-			       "          # m means mutliple keywords\n%s",
-			       argv[0], GK_OPT_SYNTAX);
+			       "  -s <ip addr>     : the source ip address of the current machine.\n", argv[0]);
 			return 0;
 		}
 	}
+
+	fprintf(stderr,
+		"[COMMAND SYNTAX]\n"
+		"LINE     = [MODE \" \"] URL | MODE | \" \" GK_OPTS\n"
+		"MODE     = \"s\" | \"ms\" | \"m\"\n"
+		"          # s means single keyword\n"
+		"          # ms means multiple simple keywords\n"
+		"          # m means mutliple keywords\n%s", GK_OPT_SYNTAX);
+
 
 	if (signal(SIGINT, inthandler) == SIG_ERR) {
 		perror("signal");
@@ -86,17 +78,51 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (gk_read_config_file(config_file, device, ip, &maxconn, &maxdst, candlist, &control_wait, &times, &time_interval, &expire_timeout, &tcp_mss, &kps, &pps))
-		fprintf(stderr, "configuration file %s doesn't exist.\n", config_file);
+		fprintf(stderr, "warning: configuration file %s doesn't exist.\n", config_file);
+
+	optind = 1;
+	while ((opt = getopt(argc, argv, "i:s:f:h")) != -1) {
+		switch (opt) {
+		case 'i':
+			strncpy(device, optarg, 100);
+			if (device[99]) {
+				fputs("device name too long\n", stderr);
+				return 1;
+			}
+			break;
+		case 's':
+			strncpy(ip, optarg, 100);
+			if (ip[99]) {
+				fputs("IP too long\n", stderr);
+				return 1;
+			}
+			break;
+		}
+	}
 
 	if ((dest = new_dstlist(maxdst)) == NULL) {
-		fprintf(stderr, "new_dstlist: memory allocation failed.\n");
+		fputs("new_dstlist: memory allocation failed.\n", stderr);
 		return -1;
 	}
-// generate cand from candlist
-	init_dstlist(dest, cand, cand_count);
+	if (candlist[0] == '\0') {
+		fputs("critical: no dstlist specified.\n", stderr);
+		return -1;
+	}
+	cand = new_candlist(candlist, &cand_count);
+	if (cand == NULL) {
+		free_dstlist(dest);
+		fputs("new_candlist: format error\n", stderr);
+		return -1;
+	}
+	if (init_dstlist(dest, cand, cand_count) != 0) {
+		free_dstlist(dest);
+		free(cand);
+		fputs("dstlist initialize failed.\n", stderr);
+		return -1;
+	}
 	if (connmanager_init(device, ip, dest, 0)) {
 		free_dstlist(dest);
-		fprintf(stderr, "connmanager_init: failed.\n");
+		fputs("connmanager_init: failed.\n", stderr);
 		return -1;
 	}
 	connmanager_run();
@@ -106,7 +132,7 @@ int main(int argc, char *argv[]) {
 	line[LINE_LEN - 1] = 1;
 	while (fgets(line, LINE_LEN, stdin)) {
 		if (line[LINE_LEN - 1] == 0 && line[LINE_LEN - 2] != '\n') {
-			fprintf(stderr, "line too long\n");
+			fputs("line too long\n", stderr);
 			continue;
 		}
 
