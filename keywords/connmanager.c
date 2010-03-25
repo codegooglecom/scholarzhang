@@ -23,6 +23,7 @@ static uint16_t linktype, linkoffset;
 #define STATUS_CHECK 0x08
 #define STATUS_TYPE1 0x10
 #define STATUS_TYPE2 0x20
+#define STATUS_ERROR 0x40
 #define STATUS_MASK 0x07
 
 struct conncontent {
@@ -202,14 +203,20 @@ static void *event_loop(void *running) {
 				conn->status = HK_TO_ST_TYPE(type) | STATUS_CHECK | 1;
 			}
 			else {
-				// Hit
+				// Hit or in consequent resetting status
 				pthread_mutex_lock(&mutex_hash);
 				return_dst_delete_hash(dest, conn->dst, type, HK_TO_ST_TYPE(result), conn->hash);
 				pthread_mutex_unlock(&mutex_hash);
-				*conn->result = type;
-				conn->callback(result, conn->arg);
-				heap_delmin(event, &event_count);
-				del_conn(conn);
+				if (conn->status & STATUS_ERROR) {
+					conn->status = HK_TO_ST_TYPE(type);
+					status = 0;
+				}
+				else {
+					*conn->result = type;
+					conn->callback(result, conn->arg);
+					heap_delmin(event, &event_count);
+					del_conn(conn);
+				}
 				goto unlock;
 			}
 		}
@@ -293,7 +300,7 @@ static void *event_loop(void *running) {
 			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
 			for (time = 0; time < times; ++time) {
 				if (-1 == libnet_write(l))
-					fprintf(errbuf, stderr);
+					fputs(errbuf, stderr);
 				else {
 					if (pps) usleep(1000000 / pps);
 					if (kps >= 1) usleep(1000 * tot / kps);
@@ -359,11 +366,11 @@ static void *listen_for_gfw(void *running) {
 				// never happens
 				continue;
 
-#define WRONG fprintf(stderr, "[Warning]: Unexpected RESET from GFW. "\
-		      "The result must be wrong. Stop other applications which " \
-		      "is connecting the same host:port connected with this " \
-		      "application, or adjust the application parameters. " \
-		      "Relaunch this application after 90 seconds.\n")
+#define WRONG fputs("[Warning]: Unexpected RESET from GFW. "\
+		    "The result must be wrong. Stop other applications which " \
+		    "is connecting the same host:port connected with this " \
+		    "application, or adjust the application parameters. " \
+		    "Relaunch this application after 90 seconds.\n", stderr), conn->status |= STATUS_ERROR
 			if (tcph->ack_seq == conn->seq
 			    && (conn->status & STATUS_MASK) >= 4)
 				conn->hit |= HK_TYPE2;
@@ -371,18 +378,17 @@ static void *listen_for_gfw(void *running) {
 				WRONG;
 		}
 		else if (type == 1) {
-			if (tcph->seq == conn->ack
-			    || (conn->status & STATUS_MASK) < 3)
+			if (tcph->seq == conn->ack || (conn->status & STATUS_MASK) < 3)
 				WRONG;
 			else if (tcph->seq > conn->ack && tcph->seq < conn->ack + 1 + (((conn->status & STATUS_CHECK)?youtube_len:conn->length) + tcp_mss - 1) / tcp_mss)
 				conn->hit |= HK_TYPE1;
 		}
 		else if (type == 2) {
-			if ((conn->status & STATUS_MASK) < 3)
+			if (tcph->seq == conn->ack || (conn->status & STATUS_MASK) < 3)
 				WRONG;
 			else if (tcph->seq > conn->ack && tcph->seq < conn->ack + 1 + (((conn->status & STATUS_CHECK)?youtube_len:conn->length) + tcp_mss - 1) / tcp_mss) {
 				conn->hit |= HK_TYPE2;
-				fprintf(stderr, "[Warning]: Special network environment. Please send the IP block of your ISP with this information to https://groups.google.com/scholarzhang-dev .\n");
+				fputs("[Warning]: Special network environment. Please send the IP block of your ISP with this information to https://groups.google.com/scholarzhang-dev .\n", stderr);
 			}
 		}
 	}
