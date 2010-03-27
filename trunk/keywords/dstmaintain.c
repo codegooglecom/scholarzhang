@@ -218,6 +218,7 @@ struct port_range *new_candlist(char *candlist, int *count) {
 				cand[*count].portR = atoi(c);
 				if ((status & 1) == 0)
 					cand[*count].portL = cand[*count].portR;
+				cand[*count].port = cand[*count].portR;
 				++(*count);
 				j = 0;
 				status = 0;
@@ -289,6 +290,8 @@ inline void empty_dstlist(struct dstlist *const list) {
 	}
 	list->count_type1 = 0;
 	list->count_type2 = 0;
+	list->removed_type1 = list->capacity;
+	list->removed_type2 = list->capacity;
 }
 
 inline void fill_dstlist_without_maintain_heap(struct dstlist *const list,
@@ -297,6 +300,7 @@ inline void fill_dstlist_without_maintain_heap(struct dstlist *const list,
 	if ( (i = list->cand_count - 1) < 0 )
 		return;
 
+	int nn = n;
 	int j, l;
 	uint32_t k, m;
 	long inittime = gettime();
@@ -310,7 +314,7 @@ inline void fill_dstlist_without_maintain_heap(struct dstlist *const list,
 			for ( j = list->candidates[i].port; j >= l; --j ) {
 				newdst = list->head;
 				list->head = *(struct dstinfo **)(list->head);
-				newdst->da = k;
+				newdst->da = htonl(k);
 				newdst->used = 0;
 				newdst->dport = j;
 				newdst->type = (HK_TYPE1 | HK_TYPE2);
@@ -327,7 +331,7 @@ inline void fill_dstlist_without_maintain_heap(struct dstlist *const list,
 				newdst->pos_type1 = list->count_type1;
 				newdst->pos_type2 = list->count_type2;
 				
-				if (--n == 0)
+				if (--nn == 0)
 					goto out;
 			}
 		}
@@ -346,8 +350,8 @@ inline void fill_dstlist_without_maintain_heap(struct dstlist *const list,
 		list->candidates[i].port = j - 1;
 	list->cand_count = i + 1;
 
-	list->removed_type1 = list->capacity - list->count_type1;
-	list->removed_type2 = list->capacity - list->count_type2;
+	list->removed_type1 -= (n - nn);
+	list->removed_type2 -= (n - nn);
 }
 
 int init_dstlist(struct dstlist *const list, struct port_range *cand, int count) {

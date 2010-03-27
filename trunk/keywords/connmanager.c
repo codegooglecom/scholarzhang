@@ -46,12 +46,12 @@ struct conncontent {
 	int length, next;
 //	int hit_at;
 	char *result;
-	callback_f callback;
+	gk_callback_f callback;
 	void *arg;
 	struct hash_t **hash;
 };
 
-#define ST_TO_HK_TYPE(status) (status >> 4)
+#define ST_TO_HK_TYPE(status) ((status >> 4) & 3)
 #define HK_TO_ST_TYPE(result) (result << 4)
 #define FP_TO_HK_TYPE(fingerprint) (fingerprint >> 8)
 
@@ -78,7 +78,7 @@ static pthread_t send_p, recv_p;
 static int control_wait = 10; // in ms
 static int times = 3;
 static int time_interval = 30;
-static int expire_timeout = 150;
+static int expire_timeout = 250;
 static int tcp_mss = 1300;
 static double kps = 0;
 static int pps = 0;
@@ -131,6 +131,7 @@ static inline void clear_queue() {
 			pthread_mutex_unlock(&mutex_hash);
 		}
 		heap_delmin(event, &event_count);
+		conn->callback(conn->content, -1, conn->arg);
 		del_conn(conn);
 	}
 	pthread_mutex_unlock(&mutex_conn);
@@ -177,13 +178,10 @@ static void *event_loop(void *running) {
 				   if it does not work with this GFW
 				   type, we will set status = 0
 				   again */
-				pthread_mutex_lock(&mutex_hash);
-				return_dst_delete_hash(dest, conn->dst, type, STATUS_CHECK | HK_TO_ST_TYPE(result), conn->hash);
-				pthread_mutex_unlock(&mutex_hash);
 				if (result & type) {
 					// GFW's working, so this is not a keyword
 					*conn->result = 0;
-					conn->callback(result, conn->arg);
+					conn->callback(conn->content, result, conn->arg);
 					heap_delmin(event, &event_count);
 					del_conn(conn);
 					goto unlock;
@@ -191,11 +189,15 @@ static void *event_loop(void *running) {
 				else {
 					/* else we know nothing about if it
 					   contains any keyword. */
+					fprintf(stderr, "[information]: GFW's not working on (%s, %d) with type%d\n", inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport, type);
 					conn->status = HK_TO_ST_TYPE(type);
 					status = 0;
 				}
+				pthread_mutex_lock(&mutex_hash);
+				return_dst_delete_hash(dest, conn->dst, type, STATUS_CHECK | HK_TO_ST_TYPE(result), conn->hash);
+				pthread_mutex_unlock(&mutex_hash);
 			}
-			else if (result & ~type) {
+			else if ((result & type) == 0) {
 				/* GFW no response to this type check
 				   if GFW is working on this (da,
 				   dp) */
@@ -212,8 +214,8 @@ static void *event_loop(void *running) {
 					status = 0;
 				}
 				else {
-					*conn->result = type;
-					conn->callback(result, conn->arg);
+					*conn->result = result;
+					conn->callback(conn->content, result, conn->arg);
 					heap_delmin(event, &event_count);
 					del_conn(conn);
 				}
@@ -239,7 +241,7 @@ static void *event_loop(void *running) {
 
 		case 1:
 			conn->sp = libnet_get_prand(LIBNET_PR16) + 32768;
-			conn->seq = libnet_get_prand(32);
+			conn->seq = libnet_get_prand(LIBNET_PR32);
 			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq++, 0, TH_SYN, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
 			tot = LIBNET_IPV4_H + LIBNET_TCP_H;
 			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
@@ -255,7 +257,7 @@ static void *event_loop(void *running) {
 			break;
 
 		case 2:
-			conn->ack = libnet_get_prand(32) + 1;
+			conn->ack = libnet_get_prand(LIBNET_PR32) + 1;
 			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq, conn->ack, TH_ACK, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
 			tot = LIBNET_IPV4_H + LIBNET_TCP_H;
 			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
@@ -294,7 +296,7 @@ static void *event_loop(void *running) {
 			break;
 
 		case 4:
-			conn->seq = libnet_get_prand(32);
+			conn->seq = libnet_get_prand(LIBNET_PR32);
 			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq++, 0, TH_SYN, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
 			tot = LIBNET_IPV4_H + LIBNET_TCP_H;
 			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
@@ -333,6 +335,8 @@ static void *listen_for_gfw(void *running) {
 	struct iphdr *iph;
 	struct conncontent *conn;
 	char type;
+	uint32_t hit_range;
+	uint32_t seq;
 
 	while (*(char *)running == 0) {
 		ret = pcap_next_ex(pd, &pkthdr, &wire);
@@ -354,50 +358,69 @@ static void *listen_for_gfw(void *running) {
 		tcph = (struct tcphdr *)(wire + linkoffset + (iph->ihl << 2));
 
 		pthread_mutex_lock(&mutex_hash);
-		conn = hash_match(ntohl(iph->saddr), ntohs(tcph->source));
+		conn = hash_match(iph->saddr, ntohs(tcph->source));
 		pthread_mutex_unlock(&mutex_hash);
 		if (conn == NULL || conn->sp != ntohs(tcph->dest))
 			continue;
 		type = FP_TO_HK_TYPE(gfw_fingerprint(wire + linkoffset));
 		if (type == 0)
 			continue;
-		if (tcph->syn) {
-			if (type != 2)
-				// never happens
-				continue;
 
 #define WRONG fputs("[Warning]: Unexpected RESET from GFW. "\
 		    "The result must be wrong. Stop other applications which " \
 		    "is connecting the same host:port connected with this " \
 		    "application, or adjust the application parameters. " \
 		    "Relaunch this application after 90 seconds.\n", stderr), conn->status |= STATUS_ERROR
-			if (tcph->ack_seq == conn->seq
-			    && (conn->status & STATUS_MASK) >= 4)
-				conn->hit |= HK_TYPE2;
-			else
+		if (tcph->syn) {
+			if (type != 2)
+				// never happens
+				continue;
+			conn->hit |= HK_TYPE2;
+			if (ntohl(tcph->ack_seq) != conn->seq
+			    || (conn->status & STATUS_MASK) < 4)
 				WRONG;
 		}
-		else if (type == 1) {
-			if (tcph->seq == conn->ack || (conn->status & STATUS_MASK) < 3)
-				WRONG;
-			else if (tcph->seq > conn->ack && tcph->seq < conn->ack + 1 + (((conn->status & STATUS_CHECK)?youtube_len:conn->length) + tcp_mss - 1) / tcp_mss)
+		else {
+			hit_range = conn->ack + 1 + (((conn->status & STATUS_CHECK)?youtube_len:conn->length) + tcp_mss - 1) / tcp_mss;
+			seq = ntohl(tcph->seq);
+
+			if (type == 1) {
 				conn->hit |= HK_TYPE1;
-		}
-		else if (type == 2) {
-			if (tcph->seq == conn->ack || (conn->status & STATUS_MASK) < 3)
-				WRONG;
-			else if (tcph->seq > conn->ack && tcph->seq < conn->ack + 1 + (((conn->status & STATUS_CHECK)?youtube_len:conn->length) + tcp_mss - 1) / tcp_mss) {
+				if (seq <= conn->ack || seq > hit_range || (conn->status & STATUS_MASK) < 3)
+					WRONG;
+//				else
+//					conn->hit_at = seq - conn->ack - 1;
+			}
+			else if (type == 2) {
 				conn->hit |= HK_TYPE2;
-				fputs("[Warning]: Special network environment. Please send the IP block of your ISP with this information to https://groups.google.com/scholarzhang-dev .\n", stderr);
+				if ((conn->status & STATUS_MASK) < 3)
+					WRONG;
+				else if (seq > hit_range) {
+					seq -= 1460;
+					if (seq > hit_range) {
+						seq -= 2920;
+						if (seq <= conn->ack)
+							WRONG;
+					}
+					if (seq <= conn->ack)
+						WRONG;
+				}
+				else if (seq <= conn->ack)
+					WRONG;
+//				else {
+//					conn->hit_at = seq - conn->ack - 1;
+//					fputs("[Warning]: Special network environment. Please send the IP block of your ISP with this information to https://groups.google.com/scholarzhang-dev .\n", stderr);
+//				}
 			}
 		}
+#undef WRONG
 	}
 
 	return NULL;
 }
 
 /* connmanager */
-void connmanager_config(int _control_wait, int _times, int _time_interval, int _expire_timeout, int _tcp_mss, double _kps, int _pps) {
+void gk_cm_config(int _control_wait, int _times, int _time_interval, int _expire_timeout, int _tcp_mss, double _kps, int _pps) {
 	if (_control_wait > 0)
 		control_wait = _control_wait;
 	if (_times > 0)
@@ -418,7 +441,7 @@ void connmanager_config(int _control_wait, int _times, int _time_interval, int _
 	}
 }
 
-int add_context(char * const content, const int length, char * const result, const int type, callback_f cb, void *arg) {
+int gk_add_context(char * const content, const int length, char * const result, const int type, gk_callback_f cb, void *arg) {
 	if (event_count == event_capa)
 		return -1;
 	pthread_mutex_lock(&mutex_conn);
@@ -447,7 +470,7 @@ int add_context(char * const content, const int length, char * const result, con
 	return 0;
 }
 
-int connmanager_run() {
+int gk_cm_run() {
 	running = 0;
 	if (pthread_create(&recv_p, NULL, listen_for_gfw, &running)) {
 		perror("recv thread creation");
@@ -464,7 +487,7 @@ int connmanager_run() {
 	return 0;
 }
 
-void connmanager_finalize() {
+void gk_cm_finalize() {
 	pthread_mutex_destroy(&mutex_conn);
 	pthread_mutex_destroy(&mutex_hash);
 
@@ -478,7 +501,7 @@ void connmanager_finalize() {
 		libnet_destroy(l);
 }
 
-void connmanager_abort() {
+void gk_cm_abort() {
 	void *ret;
 
 	if (running == 0) {
@@ -488,7 +511,7 @@ void connmanager_abort() {
 	}
 }
 
-void connmanager_finish() {
+void gk_cm_finish() {
 	void *ret;
 
 	if (running == 0) {
@@ -498,7 +521,7 @@ void connmanager_finish() {
 	}
 }
 
-int connmanager_init(char *device, char *ip, struct dstlist *list, int capa) {
+int gk_cm_init(char *device, char *ip, struct dstlist *list, int capa) {
 	if (device == NULL || device[0] == '\0') {
 		pcap_if_t *alldevsp;
 		if (pcap_findalldevs(&alldevsp, pcap_errbuf) != 0) {
@@ -549,7 +572,6 @@ int connmanager_init(char *device, char *ip, struct dstlist *list, int capa) {
 	}
 	else
 		sa = inet_addr(ip);
-	sa = ntohl(sa);
 
 	if (libnet_seed_prand(l) == -1) {
 		fputs(errbuf, stderr);
@@ -611,6 +633,6 @@ int connmanager_init(char *device, char *ip, struct dstlist *list, int capa) {
 	return 0;
 
 quit:
-	connmanager_finalize();
+	gk_cm_finalize();
 	return -1;
 }

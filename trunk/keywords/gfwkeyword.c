@@ -27,7 +27,7 @@ void gk_read_config(char *line, char *device, char *ip, int *maxconn, int *maxds
 #define PAR_LEN 20
 	char par[PAR_LEN];
 	int status, j;
-	char *p;
+	char *p, *q;
 
 #define SKIP_SPACE while (*p == ' ' || *p == '\t') ++p
 	p = line; status = 0;
@@ -105,9 +105,7 @@ void gk_read_config(char *line, char *device, char *ip, int *maxconn, int *maxds
 			for (j = 0; j < (PAR_LEN - 1) && *p != '\0' && *p != '\t' && *p != ' '; ++j, ++p)
 				par[j] = *p;
 			par[j] = '\0';
-			j = (int)p;
-			*kps = strtod(par, &p);
-			p = (char *)j;
+			*kps = strtod(par, &q);
 		}
 		else if (strcmp(par, "pps") == 0) {
 			for (j = 0; j < (PAR_LEN - 1) && *p != '\0' && *p != '\t' && *p != ' '; ++j, ++p)
