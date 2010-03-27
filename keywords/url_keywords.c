@@ -146,33 +146,39 @@ void find_single(char *url, int len) {
 		fputs("type1 keyword: ", stdout);
 		for (i = 0; i < len && result1[i] == 0; ++i);
 		while (i < len) {
-			if (result1[i]) {
+			if (result1[i])
 				putchar(result1[i]);
-				++i;
-			}
 			else {
-				fputs(" && ", stdout);
 				do {
 					++i;
 				} while (i < len && result1[i] == 0);
+				if (i < len)
+					printf(" && %c", result1[i]);
 			}
+			++i;
 		}
 		putchar('\n');
 		free(result1);
 	}
 	if (hit & HK_TYPE2) {
+		for (i = 0; i < len; ++i)
+			if ((result2[i] & HK_TYPE2) == 0)
+				result2[i] = url[i];
+			else
+				result2[i] = 0;
+		fputs("type2 keyword: ", stdout);
 		for (i = 0; i < len && result2[i] == 0; ++i);
 		while (i < len) {
-			if (result2[i]) {
+			if (result2[i])
 				putchar(result2[i]);
-				++i;
-			}
 			else {
-				fputs(" && ", stdout);
 				do {
 					++i;
 				} while (i < len && result2[i] == 0);
+				if (i < len)
+					printf(" && %c", result2[i]);
 			}
+			++i;
 		}
 		putchar('\n');
 		free(result2);
