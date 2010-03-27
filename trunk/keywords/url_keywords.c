@@ -79,7 +79,7 @@ void release_grouped_query(char *content, char result, void *arg) {
 
 void find_single(char *url, int len) {
 	char hit;
-	int i, j;
+	int i;
 	char *result1 = NULL, *result2 = NULL, *content;
 	struct count_and_sem a;
 
@@ -138,29 +138,43 @@ void find_single(char *url, int len) {
 	sem_destroy(&a.sem);
 
 	if (hit & HK_TYPE1) {
-		j = 0;
 		for (i = 0; i < len; ++i)
-			if (result1[i] == 0)
-				result1[j++] = url[i];
-		if (j == len)
-			printf("type1 keyword: %s\n", url);
-		else {
-			result1[j] = '\0';
-			printf("type1 keyword: %s\n", result1);
+			if ((result1[i] & HK_TYPE1) == 0)
+				result1[i] = url[i];
+			else
+				result1[i] = 0;
+		fputs("type1 keyword: ", stdout);
+		for (i = 0; i < len && result1[i] == 0; ++i);
+		while (i < len) {
+			if (result1[i]) {
+				putchar(result1[i]);
+				++i;
+			}
+			else {
+				fputs(" && ", stdout);
+				do {
+					++i;
+				} while (i < len && result1[i] == 0);
+			}
 		}
+		putchar('\n');
 		free(result1);
 	}
 	if (hit & HK_TYPE2) {
-		j = 0;
-		for (i = 0; i < len; ++i)
-			if (result2[i] == 0)
-				result2[j++] = url[i];
-		if (j == len)
-			printf("type2 keyword: %s\n", url);
-		else {
-			result2[j] = '\0';
-			printf("type2 keyword: %s\n", result2);
+		for (i = 0; i < len && result2[i] == 0; ++i);
+		while (i < len) {
+			if (result2[i]) {
+				putchar(result2[i]);
+				++i;
+			}
+			else {
+				fputs(" && ", stdout);
+				do {
+					++i;
+				} while (i < len && result2[i] == 0);
+			}
 		}
+		putchar('\n');
 		free(result2);
 	}
 
