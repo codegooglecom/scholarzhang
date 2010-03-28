@@ -98,7 +98,7 @@ void find_single(char *url, int len) {
 	}
 	if (hit & HK_TYPE2) {
 		result2 = malloc(len);
-		if (result1 == NULL)
+		if (result2 == NULL)
 			goto no_mem;
 		a.c += len;
 	}
@@ -359,6 +359,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	gk_cm_finish();
 	quit();
 	return 0;
 }

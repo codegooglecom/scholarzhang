@@ -40,7 +40,7 @@ struct conncontent {
 	*/
 	char hit; // HK_TYPE
 	uint16_t sp;
-	uint32_t seq, ack;
+	uint32_t seq, ack, new_seq;
 	struct dstinfo *dst;
 	char *content;
 	int length, next;
@@ -78,7 +78,7 @@ static pthread_t send_p, recv_p;
 static int control_wait = 10; // in ms
 static int times = 3;
 static int time_interval = 30;
-static int expire_timeout = 250;
+static int expire_timeout = 200;
 static int tcp_mss = 1300;
 static double kps = 0;
 static int pps = 0;
@@ -181,7 +181,7 @@ static void *event_loop(void *running) {
 				if (result & type) {
 					// GFW's working, so this is not a keyword
 					*conn->result = 0;
-					conn->callback(conn->content, result, conn->arg);
+					conn->callback(conn->content, HK_TO_ST_TYPE(result) | type, conn->arg);
 					heap_delmin(event, &event_count);
 					del_conn(conn);
 					goto unlock;
@@ -189,8 +189,9 @@ static void *event_loop(void *running) {
 				else {
 					/* else we know nothing about if it
 					   contains any keyword. */
-					fprintf(stderr, "[information]: GFW's not working on (%s, %d) with type%d\n", inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport, type);
+					fprintf(stderr, "[information]: GFW type%d is not working on (%s, %d).\n", type, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
 					conn->status = HK_TO_ST_TYPE(type);
+					conn->hit = 0;
 					status = 0;
 				}
 				pthread_mutex_lock(&mutex_hash);
@@ -206,20 +207,22 @@ static void *event_loop(void *running) {
 			}
 			else {
 				// Hit or in consequent resetting status
-				pthread_mutex_lock(&mutex_hash);
-				return_dst_delete_hash(dest, conn->dst, type, HK_TO_ST_TYPE(result), conn->hash);
-				pthread_mutex_unlock(&mutex_hash);
 				if (conn->status & STATUS_ERROR) {
 					conn->status = HK_TO_ST_TYPE(type);
+					conn->hit = 0;
 					status = 0;
 				}
 				else {
+//					fprintf(stderr, "result: %d, (%s, %d)\n", result, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
 					*conn->result = result;
-					conn->callback(conn->content, result, conn->arg);
+					conn->callback(conn->content, HK_TO_ST_TYPE(result) | type, conn->arg);
 					heap_delmin(event, &event_count);
 					del_conn(conn);
+					goto unlock;
 				}
-				goto unlock;
+				pthread_mutex_lock(&mutex_hash);
+				return_dst_delete_hash(dest, conn->dst, type, HK_TO_ST_TYPE(result), conn->hash);
+				pthread_mutex_unlock(&mutex_hash);
 			}
 		}
 
@@ -296,8 +299,8 @@ static void *event_loop(void *running) {
 			break;
 
 		case 4:
-			conn->seq = libnet_get_prand(LIBNET_PR32);
-			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq++, 0, TH_SYN, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
+			conn->new_seq = libnet_get_prand(LIBNET_PR32);
+			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->new_seq++, 0, TH_SYN, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
 			tot = LIBNET_IPV4_H + LIBNET_TCP_H;
 			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
 			for (time = 0; time < times; ++time) {
@@ -366,19 +369,28 @@ static void *listen_for_gfw(void *running) {
 		if (type == 0)
 			continue;
 
-#define WRONG fputs("[Warning]: Unexpected RESET from GFW. "\
-		    "The result must be wrong. Stop other applications which " \
-		    "is connecting the same host:port connected with this " \
-		    "application, or adjust the application parameters. " \
-		    "Relaunch this application after 90 seconds.\n", stderr), conn->status |= STATUS_ERROR
+#define WRONG { fputs("[Warning]: Unexpected RESET from GFW. "		\
+		      "The result must be wrong. Stop other applications which " \
+		      "is connecting the same host:port connected with this " \
+		      "application, or adjust the application parameters. " \
+		      "Resume keyword testing after 90 seconds.\n", stderr); \
+		fprintf(stderr, "type%d, flag:%s%s%s, (%s, %d), seq: %u, ack: %u, conn->seq: %u, conn->ack: %u" \
+			", conn->new_seq: %u, conn->status: %x\n", \
+			type, tcph->syn?"s":"", tcph->rst?"r":"", tcph->ack?"a":"", \
+			inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport, \
+			ntohl(tcph->seq), ntohl(tcph->ack_seq), conn->seq, conn->ack, \
+			conn->new_seq, conn->status); \
+		conn->status |= STATUS_ERROR; }
+
 		if (tcph->syn) {
 			if (type != 2)
 				// never happens
 				continue;
 			conn->hit |= HK_TYPE2;
-			if (ntohl(tcph->ack_seq) != conn->seq
-			    || (conn->status & STATUS_MASK) < 4)
-				WRONG;
+			seq = ntohl(tcph->ack_seq);
+			if ( ((conn->status & STATUS_MASK) < 4 || seq != conn->new_seq )
+			     && (seq != conn->seq || (conn->status & STATUS_CHECK) == 0) )
+				WRONG
 		}
 		else {
 			hit_range = conn->ack + 1 + (((conn->status & STATUS_CHECK)?youtube_len:conn->length) + tcp_mss - 1) / tcp_mss;
@@ -386,31 +398,41 @@ static void *listen_for_gfw(void *running) {
 
 			if (type == 1) {
 				conn->hit |= HK_TYPE1;
-				if (seq <= conn->ack || seq > hit_range || (conn->status & STATUS_MASK) < 3)
-					WRONG;
-//				else
-//					conn->hit_at = seq - conn->ack - 1;
-			}
-			else if (type == 2) {
-				conn->hit |= HK_TYPE2;
-				if ((conn->status & STATUS_MASK) < 3)
-					WRONG;
-				else if (seq > hit_range) {
-					seq -= 1460;
-					if (seq > hit_range) {
-						seq -= 2920;
-						if (seq <= conn->ack)
-							WRONG;
-					}
-					if (seq <= conn->ack)
-						WRONG;
+				if (conn->status & STATUS_CHECK) {
+					if (seq < conn->ack || seq > hit_range || (conn->status & STATUS_MASK) < 2)
+						WRONG
 				}
-				else if (seq <= conn->ack)
-					WRONG;
-//				else {
-//					conn->hit_at = seq - conn->ack - 1;
-//					fputs("[Warning]: Special network environment. Please send the IP block of your ISP with this information to https://groups.google.com/scholarzhang-dev .\n", stderr);
-//				}
+				else {
+					if (seq <= conn->ack || seq > hit_range || (conn->status & STATUS_MASK) < 3)
+					    WRONG
+//					else
+//						conn->hit_at = seq - conn->ack - 1;
+				}
+			}
+			else {
+				conn->hit |= HK_TYPE2;
+				if ( (conn->status & STATUS_CHECK) == 0	 ) {
+					if ( (ntohl(tcph->ack_seq) != conn->new_seq) || (conn->status & STATUS_MASK) < 4 ) {
+						if ((conn->status & STATUS_MASK) < 3)
+							WRONG
+						else if (seq > hit_range) {
+							seq -= 1460;
+							if (seq > hit_range) {
+								seq -= 2920;
+								if (seq <= conn->ack)
+									WRONG
+							}
+							if (seq <= conn->ack)
+								WRONG
+						}
+						else if (seq <= conn->ack)
+							WRONG
+//						else {
+//							conn->hit_at = seq - conn->ack - 1;
+//							fputs("[Warning]: Special network environment. Please send the IP block of your ISP with this information to https://groups.google.com/scholarzhang-dev .\n", stderr);
+//						}
+					}
+				}
 			}
 		}
 #undef WRONG
