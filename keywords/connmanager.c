@@ -32,8 +32,8 @@ struct conncontent {
 	   0: request a (da, dp)
 	   1: s
 	   2: a
-	   3: pa
-	   4: s
+	   3: fpa
+	   4: s;r
 	   5: expire
 	   STATUS_TYPE1 or STATUS_TYPE2: we are checking keyword of this type.
 	   STATUS_CHECK: check if (da, dp) works here.
@@ -123,17 +123,17 @@ static inline void clear_queue() {
 	struct conncontent *conn;
 
 	pthread_mutex_lock(&mutex_conn);
+	pthread_mutex_lock(&mutex_hash);
 	while (event_count) {
 		conn = event->data;
 		if (conn->dst) {
-			pthread_mutex_lock(&mutex_hash);
 			return_dst_delete_hash(dest, conn->dst, ST_TO_HK_TYPE(conn->status), HK_TO_ST_TYPE(conn->hit), conn->hash);
-			pthread_mutex_unlock(&mutex_hash);
 		}
 		heap_delmin(event, &event_count);
 		conn->callback(conn->content, -1, conn->arg);
 		del_conn(conn);
 	}
+	pthread_mutex_unlock(&mutex_hash);
 	pthread_mutex_unlock(&mutex_conn);
 }
 
@@ -156,13 +156,16 @@ static void *event_loop(void *running) {
 			continue;
 		}
 		while (1) {
+			pthread_mutex_lock(&mutex_conn);
 			time = event->time - gettime();
-			// event->time should be a atomic operation on 32-bit machine
-			if (time > 1000)
-				sleep(1);
+			pthread_mutex_unlock(&mutex_conn);
+			// Since heap's data is modified by memcpy, event->time is not a atomic register.
+			if (time > control_wait)
+				usleep(1000 * control_wait);
 			else
 				break;
 		}
+
 		pthread_mutex_lock(&mutex_conn);
 		time = event->time - gettime(); // time < 1000 here
 		if (time > 0)
@@ -178,25 +181,26 @@ static void *event_loop(void *running) {
 				   if it does not work with this GFW
 				   type, we will set status = 0
 				   again */
+				pthread_mutex_lock(&mutex_hash);
 				if (result & type) {
 					// GFW's working, so this is not a keyword
 					*conn->result = 0;
 					conn->callback(conn->content, HK_TO_ST_TYPE(result) | type, conn->arg);
 					heap_delmin(event, &event_count);
 					del_conn(conn);
-					goto unlock;
 				}
 				else {
 					/* else we know nothing about if it
 					   contains any keyword. */
-					fprintf(stderr, "[information]: GFW type%d is not working on (%s, %d).\n", type, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
+					fprintf(stderr, "[information]: GFW type%d is not working on (local:%d, %s:%d).\n", type, conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
 					conn->status = HK_TO_ST_TYPE(type);
 					conn->hit = 0;
 					status = 0;
 				}
-				pthread_mutex_lock(&mutex_hash);
 				return_dst_delete_hash(dest, conn->dst, type, STATUS_CHECK | HK_TO_ST_TYPE(result), conn->hash);
 				pthread_mutex_unlock(&mutex_hash);
+				if (result & type)
+					goto unlock;
 			}
 			else if ((result & type) == 0) {
 				/* GFW no response to this type check
@@ -207,27 +211,33 @@ static void *event_loop(void *running) {
 			}
 			else {
 				// Hit or in consequent resetting status
+				pthread_mutex_lock(&mutex_hash);
 				if (conn->status & STATUS_ERROR) {
 					conn->status = HK_TO_ST_TYPE(type);
 					conn->hit = 0;
 					status = 0;
 				}
 				else {
-//					fprintf(stderr, "result: %d, (%s, %d)\n", result, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
+					//fprintf(stderr, "result: %d, (local:%d, %s:%d)\n", result, conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
 					*conn->result = result;
 					conn->callback(conn->content, HK_TO_ST_TYPE(result) | type, conn->arg);
 					heap_delmin(event, &event_count);
 					del_conn(conn);
-					goto unlock;
 				}
-				pthread_mutex_lock(&mutex_hash);
 				return_dst_delete_hash(dest, conn->dst, type, HK_TO_ST_TYPE(result), conn->hash);
 				pthread_mutex_unlock(&mutex_hash);
+				if ((conn->status & STATUS_ERROR) == 0)
+					goto unlock;
 			}
 		}
 
+		//int i;
 		switch (status) {
 		case 0:
+			//for (i = 11; i < (conn->length - 13); ++i)
+			//	putchar(conn->content[i]);
+			//putchar(' ');
+			conn->sp = libnet_get_prand(LIBNET_PR16) + 32768;
 			conn->dst = (type == HK_TYPE1)?
 				get_type1(dest):
 				get_type2(dest);
@@ -237,13 +247,13 @@ static void *event_loop(void *running) {
 				goto next;
 			}
 			else {
+				//printf("(local:%d, %s:%d)\n", conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
 				pthread_mutex_lock(&mutex_hash);
 				conn->hash = hash_insert(conn->dst->da, conn->dst->dport, conn);
 				pthread_mutex_unlock(&mutex_hash);
 			}
 
 		case 1:
-			conn->sp = libnet_get_prand(LIBNET_PR16) + 32768;
 			conn->seq = libnet_get_prand(LIBNET_PR32);
 			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq++, 0, TH_SYN, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
 			tot = LIBNET_IPV4_H + LIBNET_TCP_H;
@@ -278,12 +288,15 @@ static void *event_loop(void *running) {
 
 		case 3:
 			piece = ((conn->status & STATUS_CHECK)?youtube_len:conn->length) - conn->next;
+			type = TH_ACK|TH_PUSH;
 			if (piece > 0) {
 				if (piece > tcp_mss)
 					piece = tcp_mss;
-				else
+				else {
 					conn->status = (conn->status & ~STATUS_MASK) | 4;
-				libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, TH_ACK|TH_PUSH, 16384, 0, 0, LIBNET_TCP_H + piece, ((conn->status & STATUS_CHECK)?youtube:conn->content) + conn->next, piece, l, tcp);
+					type |= TH_FIN;
+				}
+				libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, type, 16384, 0, 0, LIBNET_TCP_H + piece, ((conn->status & STATUS_CHECK)?youtube:conn->content) + conn->next, piece, l, tcp);
 				tot = LIBNET_IPV4_H + LIBNET_TCP_H + piece;
 				libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
 				for (time = 0; time < times; ++time) {
@@ -311,14 +324,25 @@ static void *event_loop(void *running) {
 					if (kps >= 1) usleep(1000 * tot / kps);
 				}
 			}
+			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->new_seq, 0, TH_RST, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
+			tot = LIBNET_IPV4_H + LIBNET_TCP_H;
+			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
+			for (time = 0; time < times; ++time) {
+				if (-1 == libnet_write(l))
+					fputs(errbuf, stderr);
+				else {
+					if (pps) usleep(1000000 / pps);
+					if (kps >= 1) usleep(1000 * tot / kps);
+				}
+			}
 			conn->status = (conn->status & ~STATUS_MASK) | 5;
 			break;
 		}
 
 		if (status != 4)
-			event->time += time_interval;
+			event->time = gettime() + time_interval;
 		else
-			event->time += expire_timeout;
+			event->time = gettime() + expire_timeout;
 	next:
 		heap_sink(event - 1, 1, event_count);
 	unlock:
@@ -343,6 +367,11 @@ static void *listen_for_gfw(void *running) {
 
 	while (*(char *)running == 0) {
 		ret = pcap_next_ex(pd, &pkthdr, &wire);
+		if (ret != 1) {
+			if (ret == -1)
+				pcap_perror(pd, "listen_for_gfw");
+			continue;
+		}
 		switch(linktype){
 		case DLT_EN10MB:
 			if (pkthdr->caplen < 14)
@@ -362,35 +391,33 @@ static void *listen_for_gfw(void *running) {
 
 		pthread_mutex_lock(&mutex_hash);
 		conn = hash_match(iph->saddr, ntohs(tcph->source));
-		pthread_mutex_unlock(&mutex_hash);
 		if (conn == NULL || conn->sp != ntohs(tcph->dest))
-			continue;
+			goto release;
 		type = FP_TO_HK_TYPE(gfw_fingerprint(wire + linkoffset));
 		if (type == 0)
-			continue;
+			goto release;
 
 #define WRONG { fputs("[Warning]: Unexpected RESET from GFW. "		\
 		      "The result must be wrong. Stop other applications which " \
 		      "is connecting the same host:port connected with this " \
 		      "application, or adjust the application parameters. " \
 		      "Resume keyword testing after 90 seconds.\n", stderr); \
-		fprintf(stderr, "type%d, flag:%s%s%s, (%s, %d), seq: %u, ack: %u, conn->seq: %u, conn->ack: %u" \
-			", conn->new_seq: %u, conn->status: %x\n", \
-			type, tcph->syn?"s":"", tcph->rst?"r":"", tcph->ack?"a":"", \
-			inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport, \
-			ntohl(tcph->seq), ntohl(tcph->ack_seq), conn->seq, conn->ack, \
-			conn->new_seq, conn->status); \
+		fprintf(stderr, "type%d, flag:%s%s%s, (local:%d, %s:%d), seq: %u, "\
+			"ack: %u, conn->seq: %u, conn->ack: %u, conn->new_seq: %u, " \
+			"conn->status: %x\n", type, tcph->syn?"s":"", tcph->rst?"r":"",	\
+			tcph->ack?"a":"", conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), \
+			conn->dst->dport, ntohl(tcph->seq), ntohl(tcph->ack_seq), \
+			conn->seq, conn->ack, conn->new_seq, conn->status); \
 		conn->status |= STATUS_ERROR; }
 
 		if (tcph->syn) {
-			if (type != 2)
-				// never happens
-				continue;
-			conn->hit |= HK_TYPE2;
-			seq = ntohl(tcph->ack_seq);
-			if ( ((conn->status & STATUS_MASK) < 4 || seq != conn->new_seq )
-			     && (seq != conn->seq || (conn->status & STATUS_CHECK) == 0) )
-				WRONG
+			if (type == 2) {
+				conn->hit |= HK_TYPE2;
+				seq = ntohl(tcph->ack_seq);
+				if ( ((conn->status & STATUS_MASK) < 4 || seq != conn->new_seq )
+				     && (seq != conn->seq || (conn->status & STATUS_CHECK) == 0) )
+					WRONG
+			}
 		}
 		else {
 			hit_range = conn->ack + 1 + (((conn->status & STATUS_CHECK)?youtube_len:conn->length) + tcp_mss - 1) / tcp_mss;
@@ -436,6 +463,8 @@ static void *listen_for_gfw(void *running) {
 			}
 		}
 #undef WRONG
+	release:
+		pthread_mutex_unlock(&mutex_hash);
 	}
 
 	return NULL;
@@ -477,7 +506,7 @@ int gk_add_context(char * const content, const int length, char * const result, 
 	conn->content = content;
 	conn->length = length;
 	conn->result = result;
-	*conn->result = -1;
+	*result = -1;
 	conn->status = HK_TO_ST_TYPE(type);
 	conn->hit = 0;
 	conn->callback = cb;
