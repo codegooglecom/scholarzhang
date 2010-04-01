@@ -32,7 +32,7 @@ struct conncontent {
 	   0: request a (da, dp)
 	   1: s
 	   2: a
-	   3: fpa
+	   3: pa;a---fpa;a
 	   4: s;r
 	   5: expire
 	   STATUS_TYPE1 or STATUS_TYPE2: we are checking keyword of this type.
@@ -297,9 +297,9 @@ static void *event_loop(void *running) {
 					conn->status = (conn->status & ~STATUS_MASK) | 4;
 					type |= TH_FIN;
 				}
-				libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, type, 16384, 0, 0, LIBNET_TCP_H + piece, ((conn->status & STATUS_CHECK)?youtube:conn->content) + conn->next, piece, l, tcp);
+				tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, type, 16384, 0, 0, LIBNET_TCP_H + piece, ((conn->status & STATUS_CHECK)?youtube:conn->content) + conn->next, piece, l, tcp);
 				tot = LIBNET_IPV4_H + LIBNET_TCP_H + piece;
-				libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
+				ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
 				for (time = 0; time < times; ++time) {
 					if (-1 == libnet_write(l))
 						fputs(errbuf, stderr);
@@ -309,6 +309,18 @@ static void *event_loop(void *running) {
 					}
 				}
 				conn->next += piece;
+
+				tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, TH_ACK, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
+				tot = LIBNET_IPV4_H + LIBNET_TCP_H;
+				ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
+				for (time = 0; time < times; ++time) {
+					if (-1 == libnet_write(l))
+						fputs(errbuf, stderr);
+					else {
+						if (pps) usleep(1000000 / pps);
+						if (kps >= 1) usleep(1000 * tot / kps);
+					}
+				}
 			}
 			break;
 
