@@ -89,7 +89,7 @@ static uint32_t sa;
 static char running = -1;
 
 static const char youtube[] = "GET http://www.youtube.com HTTP/1.1\r\n\r\n";
-static const int  youtube_len = sizeof(youtube);
+static const int  youtube_len = strlen(youtube);
 
 /* (da, dp) recycle */
 #include "return_dst.c"
