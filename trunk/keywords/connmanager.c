@@ -174,6 +174,7 @@ static void *event_loop(void *running) {
 		status = conn->status & STATUS_MASK;
 		type = ST_TO_HK_TYPE(conn->status);
 
+		time = gettime();
 		if (status == 5) {
 			char result = conn->hit;
 			if (conn->status & STATUS_CHECK) {
@@ -234,7 +235,7 @@ static void *event_loop(void *running) {
 		//int i;
 		switch (status) {
 		case 0:
-			//for (i = 11; i < (conn->length - 13); ++i)
+			//for (i = 11; conn->content[i] != ' '; ++i)
 			//	putchar(conn->content[i]);
 			//putchar(' ');
 			conn->sp = libnet_get_prand(LIBNET_PR16) + 32768;
@@ -340,9 +341,9 @@ static void *event_loop(void *running) {
 		}
 
 		if (status != 4)
-			event->time = gettime() + time_interval;
+			event->time = time + time_interval;
 		else
-			event->time = gettime() + expire_timeout;
+			event->time = time + expire_timeout;
 	next:
 		heap_sink(event - 1, 1, event_count);
 	unlock:
