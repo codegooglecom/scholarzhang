@@ -92,7 +92,8 @@ gfw_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 		/* dns[1]: dns flags */
 		if ((iph->id == htons(0x7110) && dns[1] == htons(0x8180)
 			&& ttl == htonl(300) && name == htons(0xc00c))
-			&& ntohl(ttl) >= 3600 && (ntohl(ttl) < 46800 || ntohl(ttl) == 86400)
+			|| (ntohl(ttl) >= 3600
+			&& (ntohl(ttl) < 46800 || ntohl(ttl) == 86400)
 			&& dns[1] == htons(0x8580) && name != htons(0xc00c))) {
 			if (addr == htonl(0x5d2e0859)
 			|| addr == htonl(0xcb620741)
