@@ -49,17 +49,17 @@ char match_type(char *url, int len) {
 
 	memcpy(content, "GET http://", HH_PRE_LEN);
 	memcpy(content + HH_PRE_LEN, url, len);
-	memcpy(content + HH_PRE_LEN + len, " HTTP/1.1\n\n\r\n", HH_PST_LEN);
+	memcpy(content + HH_PRE_LEN + len, " HTTP/1.1\r\n\r\n", HH_PST_LEN);
 
 	sem_t sem;
 	sem_init(&sem, 0, 0);
-	gk_add_context(content, len + HH_ADD_LEN - 2, &result1, HK_TYPE1, release_single_query, &sem);
+	gk_add_context(content, len + HH_ADD_LEN, &result2, HK_TYPE2, release_single_query, &sem);
 	sem_wait(&sem);
-	if (result1 & HK_TYPE2)
-		result2 = HK_TYPE2;
+	if (result2 & HK_TYPE1)
+		result1 = HK_TYPE1;
 	else {
-		content[len + HH_ADD_LEN - 4] = '\r';
-		gk_add_context(content, len + HH_ADD_LEN, &result2, HK_TYPE2, release_single_query, &sem);
+		content[len + HH_ADD_LEN - 4] = '\n';
+		gk_add_context(content, len + HH_ADD_LEN - 2, &result1, HK_TYPE1, release_single_query, &sem);
 		sem_wait(&sem);
 	}
 	free(content);

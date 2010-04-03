@@ -15,10 +15,11 @@
 #define _CONNMANAGER_
 
 static libnet_t *l = NULL;
+static libnet_ptag_t tcp = 0, ip = 0;
 static char errbuf[LIBNET_ERRBUF_SIZE];
 static pcap_t *pd = NULL;
 static char pcap_errbuf[PCAP_ERRBUF_SIZE];
-static uint16_t linktype, linkoffset;
+static u_int16_t linktype, linkoffset;
 
 #define STATUS_CHECK 0x08
 #define STATUS_TYPE1 0x10
@@ -39,8 +40,8 @@ struct conncontent {
 	   STATUS_CHECK: check if (da, dp) works here.
 	*/
 	char hit; // HK_TYPE
-	uint16_t sp;
-	uint32_t seq, ack, new_seq;
+	u_int16_t sp;
+	u_int32_t seq, ack, new_seq;
 	struct dstinfo *dst;
 	char *content;
 	int length, next;
@@ -76,7 +77,7 @@ static pthread_mutex_t mutex_conn, mutex_hash;
 static pthread_t send_p, recv_p;
 
 static int control_wait = 10; // in ms
-static int times = 3;
+static int times = 8;
 static int time_interval = 30;
 static int expire_timeout = 200;
 static int tcp_mss = 1300;
@@ -84,12 +85,12 @@ static double kps = 0;
 static int pps = 0;
 #define GFW_TIMEOUT 90000 // 90 sec
 
-static uint32_t sa;
+static u_int32_t sa;
 
 static char running = -1;
 
-static const char youtube[] = "GET http://www.youtube.com HTTP/1.1\r\n\r\n";
-static const int  youtube_len = strlen(youtube);
+static const char const youtube[] = "GET http://www.youtube.com HTTP/1.1\r\n\r\n";
+static const int  youtube_len = sizeof(youtube) - 1;
 
 /* (da, dp) recycle */
 #include "return_dst.c"
@@ -137,13 +138,28 @@ static inline void clear_queue() {
 	pthread_mutex_unlock(&mutex_conn);
 }
 
+static inline void sendpacket(u_int32_t sa, u_int32_t da, u_int16_t sp, u_int16_t dp, u_int8_t flag, u_int32_t seq, u_int32_t ack, u_int8_t *payload, u_int16_t len) {
+	int i;
+
+	tcp = libnet_build_tcp(sp, dp, seq, ack, flag, 16384, 0, 0, len + LIBNET_TCP_H, payload, len, l, tcp);
+	len += LIBNET_IPV4_H + LIBNET_TCP_H;
+	ip = libnet_build_ipv4(len, 0, 0, IP_DF, 128, IPPROTO_TCP, 0, sa, da, NULL, 0, l, ip);
+
+	for (i = 0; i < times; ++i) {
+		if (-1 == libnet_write(l))
+			fputs(errbuf, stderr);
+		else {
+			if (pps) usleep(1000000 / pps);
+			if (kps >= 1) usleep(1000 * len / kps);
+		}
+	}
+}
+
 static void *event_loop(void *running) {
 	struct conncontent *conn;
 	char status;
 	char type;
-	libnet_ptag_t tcp = 0, ip = 0;
-	uint16_t piece;
-	uint16_t tot;
+	u_int16_t piece;
 	long time;
 
 	while (1) {
@@ -256,33 +272,13 @@ static void *event_loop(void *running) {
 
 		case 1:
 			conn->seq = libnet_get_prand(LIBNET_PR32);
-			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq++, 0, TH_SYN, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
-			tot = LIBNET_IPV4_H + LIBNET_TCP_H;
-			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
-			for (time = 0; time < times; ++time) {
-				if (-1 == libnet_write(l))
-					fputs(errbuf, stderr);
-				else {
-					if (pps) usleep(1000000 / pps);
-					if (kps >= 1) usleep(1000 * tot / kps);
-				}
-			}
+			sendpacket(sa, conn->dst->da, conn->sp, conn->dst->dport, TH_SYN, conn->seq++, 0, NULL, 0);
 			conn->status = (conn->status & ~STATUS_MASK) | 2;
 			break;
 
 		case 2:
 			conn->ack = libnet_get_prand(LIBNET_PR32) + 1;
-			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq, conn->ack, TH_ACK, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
-			tot = LIBNET_IPV4_H + LIBNET_TCP_H;
-			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
-			for (time = 0; time < times; ++time) {
-				if (-1 == libnet_write(l))
-					fputs(errbuf, stderr);
-				else {
-					if (pps) usleep(1000000 / pps);
-					if (kps >= 1) usleep(1000 * tot / kps);
-				}
-			}
+			sendpacket(sa, conn->dst->da, conn->sp, conn->dst->dport, TH_ACK, conn->seq, conn->ack, NULL, 0);
 			conn->next = 0;
 			conn->status = (conn->status & ~STATUS_MASK) | 3;
 			break;
@@ -297,57 +293,17 @@ static void *event_loop(void *running) {
 					conn->status = (conn->status & ~STATUS_MASK) | 4;
 					type |= TH_FIN;
 				}
-				tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, type, 16384, 0, 0, LIBNET_TCP_H + piece, ((conn->status & STATUS_CHECK)?youtube:conn->content) + conn->next, piece, l, tcp);
-				tot = LIBNET_IPV4_H + LIBNET_TCP_H + piece;
-				ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
-				for (time = 0; time < times; ++time) {
-					if (-1 == libnet_write(l))
-						fputs(errbuf, stderr);
-					else {
-						if (pps) usleep(1000000 / pps);
-						if (kps >= 1) usleep(1000 * tot / kps);
-					}
-				}
+				sendpacket(sa, conn->dst->da, conn->sp, conn->dst->dport, type, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, (u_int8_t *)((conn->status & STATUS_CHECK)?youtube:conn->content) + conn->next, piece);
 				conn->next += piece;
-
-				tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, TH_ACK, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
-				tot = LIBNET_IPV4_H + LIBNET_TCP_H;
-				ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
-				for (time = 0; time < times; ++time) {
-					if (-1 == libnet_write(l))
-						fputs(errbuf, stderr);
-					else {
-						if (pps) usleep(1000000 / pps);
-						if (kps >= 1) usleep(1000 * tot / kps);
-					}
-				}
+				if (type & TH_FIN)
+					sendpacket(sa, conn->dst->da, conn->sp, conn->dst->dport, TH_ACK, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, NULL, 0);
 			}
 			break;
 
 		case 4:
 			conn->new_seq = libnet_get_prand(LIBNET_PR32);
-			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->new_seq++, 0, TH_SYN, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
-			tot = LIBNET_IPV4_H + LIBNET_TCP_H;
-			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
-			for (time = 0; time < times; ++time) {
-				if (-1 == libnet_write(l))
-					fputs(errbuf, stderr);
-				else {
-					if (pps) usleep(1000000 / pps);
-					if (kps >= 1) usleep(1000 * tot / kps);
-				}
-			}
-			tcp = libnet_build_tcp(conn->sp, conn->dst->dport, conn->new_seq, 0, TH_RST, 16384, 0, 0, LIBNET_TCP_H, NULL, 0, l, tcp);
-			tot = LIBNET_IPV4_H + LIBNET_TCP_H;
-			ip = libnet_build_ipv4(tot, 0, 0, IP_DF, 64, IPPROTO_TCP, 0, sa, conn->dst->da, NULL, 0, l, ip);
-			for (time = 0; time < times; ++time) {
-				if (-1 == libnet_write(l))
-					fputs(errbuf, stderr);
-				else {
-					if (pps) usleep(1000000 / pps);
-					if (kps >= 1) usleep(1000 * tot / kps);
-				}
-			}
+			sendpacket(sa, conn->dst->da, conn->sp, conn->dst->dport, TH_SYN, conn->new_seq++, 0, NULL, 0);
+			sendpacket(sa, conn->dst->da, conn->sp, conn->dst->dport, TH_RST, conn->new_seq, 0, NULL, 0);
 			conn->status = (conn->status & ~STATUS_MASK) | 5;
 			break;
 		}
@@ -370,13 +326,13 @@ static void *event_loop(void *running) {
 static void *listen_for_gfw(void *running) {
 	int ret;
 	struct pcap_pkthdr *pkthdr;
-	uint8_t *wire;
+	const u_int8_t *wire;
 	struct tcphdr *tcph;
 	struct iphdr *iph;
 	struct conncontent *conn;
 	char type;
-	uint32_t hit_range;
-	uint32_t seq;
+	u_int32_t hit_range;
+	u_int32_t seq;
 
 	while (*(char *)running == 0) {
 		ret = pcap_next_ex(pd, &pkthdr, &wire);

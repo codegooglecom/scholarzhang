@@ -42,17 +42,19 @@ int gfw_fingerprint(const void *buf){
 		const struct tcphdr *tcp = buf + (ip->ihl << 2);
 		unless((tcp->doff << 2) - sizeof(struct tcphdr) == 0)
 			m1=0, m1a=0, m2=0, m2a=0;
+		if(ip->id == 0 && (tcp->window == 0 || ntohs(tcp->window) > 888))
+			m1=0, m1a=0, m2=0, m2a=0;
 		unless(tcp->rst && !tcp->ack)
 			m1=0, m1a=0;
 		unless((tcp->rst || tcp->syn) && tcp->ack)
 			m2=0, m2a=0;
 		unless(ntohs(tcp->window) % 17 == 0)
 			m1=0;
-		unless(ntohs(ip->id) == (u_int16_t)(-1 - ntohs(tcp->window) * 13))
-			m2=0;
+//		unless(ntohs(ip->id) == (u_int16_t)(-1 - ntohs(tcp->window) * 13))
+//			m2=0;
 		unless((ntohs(tcp->window) - ntohs(tcp->source)/2) % 9 == 0)
 			m1a=0;
-		unless(ntohs(ip->id) + ntohs(tcp->window) * 79 == 62753)
+		unless(ntohs(ip->id) == (u_int16_t)(62753 - ntohs(tcp->window) * 79))
 			m2a=0;
 	}
 	if(m1)
@@ -82,6 +84,8 @@ int gfw_fingerprint_sprint(char *s, const void *buf){
 	if(ip->protocol == IPPROTO_TCP){
 		const struct tcphdr *tcp = buf + (ip->ihl << 2);
 		unless((tcp->doff << 2) - sizeof(struct tcphdr) == 0)
+			m1=0, m1a=0, m2=0, m2a=0;
+		if(ip->id == 0 && (tcp->window == 0 || ntohs(tcp->window) > 888))
 			m1=0, m1a=0, m2=0, m2a=0;
 		unless(tcp->rst && !tcp->ack)
 			m1=0, m1a=0;

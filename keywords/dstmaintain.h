@@ -18,8 +18,8 @@ extern inline long gettime() {
 #define DEFAULT_DST 500000
 
 struct port_range {
-	uint32_t addrL, addrR;
-	uint16_t portL, portR, port;
+	u_int32_t addrL, addrR;
+	u_int16_t portL, portR, port;
 };
 
 struct dstinfo;
@@ -32,8 +32,8 @@ struct idle_t {
 #define HK_TYPE2 2
 
 struct dstinfo {
-	uint32_t da;
-	uint16_t dport;
+	u_int32_t da;
+	u_int16_t dport;
 	char used, type;
 	int pos_type1, pos_type2;
 	/* pos here is the index of this dst in heap typeX + 1 (index
