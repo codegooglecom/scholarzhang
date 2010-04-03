@@ -302,7 +302,7 @@ inline void fill_dstlist_without_maintain_heap(struct dstlist *const list,
 
 	int nn = n;
 	int j, l;
-	uint32_t k, m;
+	u_int32_t k, m;
 	long inittime = gettime();
 	struct dstinfo *newdst;
 	struct idle_t *idle;
