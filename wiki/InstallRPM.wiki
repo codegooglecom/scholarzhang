@@ -1,6 +1,8 @@
 #summary 如何以 RPM 套件方式安裝本軟體。（Fedora 發行版）
 #labels Fedora,RPM,SRPM,Install,doc
 
+= 已分成 用戶空間 及 內核模組 兩 RPM 包，此頁已不適用，需要更新。 ＝
+
 = 前言 =
 
 本文將簡略解說如何以 RPM 方式安裝本軟體。
