@@ -13,10 +13,6 @@
 
 建議按照以下步驟，自行編譯基於您系統內的內核版本的內核模組。
 
-把內核模組及非[http://rpmfusion.org/Packaging/KernelModules/Kmods2 內核模組分割]成兩個套件的任務，仍然在處理當中；
-
-當分割完成後，就會送到 RPMFusion 非官方 Fedora 源進行[http://rpmfusion.org/Contributors 入源審核]。
-
 （以下步驟為 Fedora 12 或以上適用，並不保證於其他 Fedora 舊版本或分支能順利實行。）
 
 = SRPM 安裝步驟 =
