@@ -60,7 +60,7 @@ PUCHAR GetPacket(PNDIS_PACKET packet)
 	offset = copysize;
 
 	//------------------------Copy everything-----------------------------
-	while(1) {
+	while(1) {				//TODO: unsafe.
 		NdisGetNextBuffer(buffer, &buffer);
 		if (buffer == NULL)
 			break;
@@ -212,7 +212,8 @@ BOOLEAN IsGFWPoisoned(PUCHAR data)
 		ttl = *(unsigned int *)(end-10);
 		name = *(unsigned short *)(end-16);
 		if ( (ip->id == htons(0x7110) && dns[1] == htons(0x8180) && ttl == htonl(300) && name == htons(0xc00c))
-			|| (ntohs(ip->id) % 79 == 27 && dns[1] == htons(0x8580) && ttl == htonl(86400) && name != htons(0xc00c))) {
+			//|| (ntohs(ip->id) % 79 == 27 && dns[1] == htons(0x8580) && ttl == htonl(86400) && name != htons(0xc00c))) {
+			|| (ntohl(ttl)>=3600 && (ntohl(ttl)<46800 ||ntohl(ttl)==86400) && dns[1]==htons(0x8580) && name!=htons(0xc00c))) {
 				if (addr == htonl(0x5d2e0859)
 					|| addr == htonl(0xcb620741)
 					|| addr == htonl(0x0807c62d)

@@ -1012,6 +1012,7 @@ Return Value:
 			 break;
 
 		  case NdisMediumFddi:
+			  /*
 			 NdisMFddiIndicateReceive(pAdapt->MiniportHandle,
 											  MacReceiveContext,
 											  HeaderBuffer,
@@ -1019,6 +1020,7 @@ Return Value:
 											  LookAheadBuffer,
 											  LookAheadBufferSize,
 											  PacketSize);
+											  */
 			 break;
 
 		  default:
@@ -1069,7 +1071,7 @@ Return Value:
 			break;
 
 		  case NdisMediumFddi:
-			NdisMFddiIndicateReceiveComplete(pAdapt->MiniportHandle);
+			//NdisMFddiIndicateReceiveComplete(pAdapt->MiniportHandle);
 			break;
 
 		  default:
