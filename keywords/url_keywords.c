@@ -314,16 +314,14 @@ int main(int argc, char *argv[]) {
 			gk_cm_config(control_wait, times, time_interval, expire_timeout, tcp_mss, kps, pps);
 		}
 		else {
-			if (line[0] == 'q')
-				break;
-			offset = 2;
+			offset = 1;
 			if (line[0] == 'm')
 				if (line[1] == 's') {
-					offset = 3;
+					offset = 2;
 					local_mode = 2;
 				}
 				else
-					local_mode = 3;
+					local_mode = 2;
 			else if (line[0] == 's')
 				local_mode = 1;
 			else {
