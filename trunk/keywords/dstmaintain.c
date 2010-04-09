@@ -19,7 +19,7 @@ inline void type1_lift(struct idle_t *const hsub, int p) {
 
 	if (p > 1) {
 		int n = p >> 1;
-		if ( (hsub + p)->time - (hsub + n)->time > 0 )
+		if ( (hsub + p)->time - (hsub + n)->time >= 0 )
 			return;
 		memcpy(&orig, hsub + p, sizeof(struct idle_t));
 		do {
@@ -100,7 +100,7 @@ inline void type2_lift(struct idle_t *const hsub, int p) {
 
 	if (p > 1) {
 		int n = p >> 1;
-		if ( (hsub - p)->time - (hsub - n)->time > 0 )
+		if ( (hsub - p)->time - (hsub - n)->time >= 0 )
 			return;
 		memcpy(&orig, hsub - p, sizeof(struct idle_t));
 		do {
@@ -318,7 +318,7 @@ inline void fill_dstlist_without_maintain_heap(struct dstlist *const list,
 				newdst->used = 0;
 				newdst->dport = j;
 				newdst->type = (HK_TYPE1 | HK_TYPE2);
-				
+
 				idle = list->idle_type1 + list->count_type1;
 				idle->dst = newdst;
 				idle->time = inittime;
@@ -327,10 +327,10 @@ inline void fill_dstlist_without_maintain_heap(struct dstlist *const list,
 				idle->dst = newdst;
 				idle->time = inittime;
 				++list->count_type2;
-				
+
 				newdst->pos_type1 = list->count_type1;
 				newdst->pos_type2 = list->count_type2;
-				
+
 				if (--nn == 0)
 					goto out;
 			}
@@ -405,8 +405,10 @@ inline struct dstinfo *get_type1(struct dstlist *const list) {
 		usleep(1000 * (time % 1000));
 	}
 	type1_delmin( idle, &list->count_type1 );
-	(list->idle_type2 - (idle->dst->pos_type2 - 1))->time += DAY_NS;
-	type2_sink( list->idle_type2 + 1, idle->dst->pos_type2, list->count_type2 );
+	if (idle->dst->type & HK_TYPE2) {
+		(list->idle_type2 - (idle->dst->pos_type2 - 1))->time += DAY_NS;
+		type2_sink( list->idle_type2 + 1, idle->dst->pos_type2, list->count_type2 );
+	}
 
 	return idle->dst;
 }
@@ -422,8 +424,10 @@ inline struct dstinfo *get_type2(struct dstlist *const list) {
 		usleep(1000 * (time % 1000));
 	}
 	type2_delmin( idle, &list->count_type2 );
-	(list->idle_type1 + (idle->dst->pos_type1 - 1))->time += DAY_NS;
-	type1_sink( list->idle_type1 - 1, idle->dst->pos_type1, list->count_type1 );
+	if (idle->dst->type & HK_TYPE1) {
+		(list->idle_type1 + (idle->dst->pos_type1 - 1))->time += DAY_NS;
+		type1_sink( list->idle_type1 - 1, idle->dst->pos_type1, list->count_type1 );
+	}
 
 	return idle->dst;
 }
