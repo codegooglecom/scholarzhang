@@ -131,13 +131,13 @@ char match_type(char *url, int len) {
 
 	sem_t sem;
 	sem_init(&sem, 0, 0);
-	gk_add_context(content, len + HH_ADD_LEN, &result2, HK_TYPE2, release_single_query, &sem);
+	gk_add_context_blocking(content, len + HH_ADD_LEN, &result2, HK_TYPE2, release_single_query, &sem);
 	sem_wait(&sem);
 	if (result2 & HK_TYPE1)
 		result1 = HK_TYPE1;
 	else {
 		content[len + HH_ADD_LEN - 4] = '\n';
-		gk_add_context(content, len + HH_ADD_LEN - 2, &result1, HK_TYPE1, release_single_query, &sem);
+		gk_add_context_blocking(content, len + HH_ADD_LEN - 2, &result1, HK_TYPE1, release_single_query, &sem);
 		sem_wait(&sem);
 	}
 	free(content);
