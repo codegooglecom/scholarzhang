@@ -197,7 +197,7 @@ void find_single(char *url, int len) {
 			memcpy(content + HH_PRE_LEN, url, i);
 			memcpy(content + HH_PRE_LEN + i, url + i + 1, len - i - 1);
 			memcpy(content + HH_PRE_LEN + len - 1, " HTTP/1.1\n\n", HH_PST_LEN - 2);
-			gk_add_context(content, len + HH_ADD_LEN - 3, result1 + i, HK_TYPE1, release_grouped_query, &a);
+			gk_add_context_blocking(content, len + HH_ADD_LEN - 3, result1 + i, HK_TYPE1, release_grouped_query, &a);
 		}
 	}
 	if (hit & HK_TYPE2) {
@@ -209,7 +209,7 @@ void find_single(char *url, int len) {
 			memcpy(content + HH_PRE_LEN, url, i);
 			memcpy(content + HH_PRE_LEN + i, url + i + 1, len - i - 1);
 			memcpy(content + HH_PRE_LEN + len - 1, " HTTP/1.1\r\n\r\n", HH_PST_LEN);
-			gk_add_context(content, len + HH_ADD_LEN - 1, result2 + i, HK_TYPE2, release_grouped_query, &a);
+			gk_add_context_blocking(content, len + HH_ADD_LEN - 1, result2 + i, HK_TYPE2, release_grouped_query, &a);
 		}
 	}
 
