@@ -412,7 +412,7 @@ inline struct dstinfo *get_type1(struct dstlist *const list) {
 	}
 	type1_delmin( list->idle_type1, &list->count_type1 );
 	if (dst->type & HK_TYPE2) {
-		(list->idle_type2 - (dst->pos_type2 - 1))->time += DAY_NS;
+		(list->idle_type2 - (dst->pos_type2 - 1))->time += DAY_MS;
 		type2_sink( list->idle_type2 + 1, dst->pos_type2, list->count_type2 );
 	}
 
@@ -431,7 +431,7 @@ inline struct dstinfo *get_type2(struct dstlist *const list) {
 	}
 	type2_delmin( list->idle_type2, &list->count_type2 );
 	if (dst->type & HK_TYPE1) {
-		(list->idle_type1 + (dst->pos_type1 - 1))->time += DAY_NS;
+		(list->idle_type1 + (dst->pos_type1 - 1))->time += DAY_MS;
 		type1_sink( list->idle_type1 - 1, dst->pos_type1, list->count_type1 );
 	}
 

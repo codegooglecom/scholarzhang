@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 long gettime();
-#define DAY_NS 86400000
+#define DAY_MS 86400000
 #define DAY_S 86400
 extern inline long gettime() {
 	struct timeval tv;

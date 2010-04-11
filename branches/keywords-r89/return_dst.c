@@ -27,7 +27,7 @@ static inline void return_type1(struct dstlist *const list, struct dstinfo *cons
 			else {
 				/* it's either not hit or not usable, so that
 				   we recover its available time */
-				(list->idle_type2 - (dst->pos_type2 - 1))->time -= DAY_NS;
+				(list->idle_type2 - (dst->pos_type2 - 1))->time -= DAY_MS;
 				type2_lift(list->idle_type2 + 1, dst->pos_type2);
 			}
 		}
@@ -71,7 +71,7 @@ static inline void return_type2(struct dstlist *const list, struct dstinfo *cons
 			else {
 				/* it's either not hit or not usable, so that
 				   we recover its available time */
-				(list->idle_type1 + (dst->pos_type1 - 1))->time -= DAY_NS;
+				(list->idle_type1 + (dst->pos_type1 - 1))->time -= DAY_MS;
 				type1_lift(list->idle_type1 - 1, dst->pos_type1);
 			}
 		}
