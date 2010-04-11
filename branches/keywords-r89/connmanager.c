@@ -366,19 +366,23 @@ static void *listen_for_gfw(void *running) {
 		if (type == 0)
 			goto release;
 
-#define WRONG { fputs("[Warning]: Unexpected RESET from GFW. "		\
-		      "The result must be wrong. Stop other applications which " \
-		      "is connecting the same host:port connected with this " \
-		      "application, or adjust the application parameters. " \
-		      "Resume keyword testing after 90 seconds.\n", stderr); \
-		fprintf(stderr, "type%d, flag:%s%s%s, (local:%d, %s:%d), seq: %u, "\
-			"ack: %u, conn->seq: %u, conn->ack: %u, conn->new_seq: %u, " \
-			"conn->status: %x\n", type, tcph->syn?"s":"", tcph->rst?"r":"",	\
-			tcph->ack?"a":"", conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), \
-			conn->dst->dport, ntohl(tcph->seq), ntohl(tcph->ack_seq), \
-			conn->seq, conn->ack, conn->new_seq, conn->status); \
-		conn->status |= STATUS_ERROR; }
-
+#define WRONG {						\
+if (ST_TO_HK_TYPE(conn->status) == type) {	\
+	fputs("[Warning]: Unexpected RESET from GFW. "			\
+	      "The result must be wrong. Stop other applications which " \
+	      "is connecting the same host:port connected with this "	\
+	      "application, or adjust the application parameters. "	\
+	      "Resume keyword testing after 90 seconds.\n", stderr);	\
+	fprintf(stderr, "type%d, flag:%s%s%s, (local:%d, %s:%d), seq: %u, " \
+		"ack: %u, conn->seq: %u, conn->ack: %u, conn->new_seq: %u, " \
+		"conn->status: %x\n", type, tcph->syn?"s":"", tcph->rst?"r":"",	\
+		tcph->ack?"a":"", conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), \
+		conn->dst->dport, ntohl(tcph->seq), ntohl(tcph->ack_seq), \
+		conn->seq, conn->ack, conn->new_seq, conn->status);	\
+	conn->status |= STATUS_ERROR;					\
+}									\
+		}
+		
 		if (tcph->syn) {
 			if (type == 2) {
 				conn->hit |= HK_TYPE2;
