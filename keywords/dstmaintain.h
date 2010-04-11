@@ -59,10 +59,10 @@ int init_dstlist(struct dstlist *const list, struct port_range *cand, int count)
 void dstlist_delete( struct dstlist *const list, struct dstinfo *const dst);
 
 void type1_lift(struct idle_t *const hsub, int p );
-void type1_insert(struct idle_t *const heap, const long time, void *const dst, int *const size);
+void type1_insert(struct idle_t *const heap, const long time, struct dstinfo *const dst, int *const size);
 void type1_delete(struct idle_t *const heap, const int p, int *const size);
 void type2_lift(struct idle_t *const hsub, int p );
-void type2_insert(struct idle_t *const heap, const long time, void *const dst, int *const size);
+void type2_insert(struct idle_t *const heap, const long time, struct dstinfo *const dst, int *const size);
 void type2_delete(struct idle_t *const heap, const int p, int *const size);
 
 void supply_type1(struct dstlist *const list);

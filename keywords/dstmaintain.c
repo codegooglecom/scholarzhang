@@ -76,20 +76,23 @@ inline void init_type1( struct dstlist *const list) {
 inline void type1_delmin(struct idle_t *const heap, int *const size ) {
 //	heap->dst->pos_type1 = 0; // not necessary
 	memcpy( heap, heap + (--*size), sizeof(struct idle_t) );
+	heap->dst->pos_type1 = 1;
 	type1_sink( heap - 1, 1, *size);
 }
 
 inline void type1_insert(struct idle_t *const heap, const long time,
-			 void *const dst, int *const size ) {
+			 struct dstinfo *const dst, int *const size ) {
 	(heap + *size)->time = time;
 	(heap + *size)->dst = dst;
-	type1_lift( heap - 1, ++(*size) );
+	dst->pos_type1 = ++(*size);
+	type1_lift( heap - 1, *size );
 }
 
 inline void type1_delete(struct idle_t *const heap, const int p,
 			 int *const size) {
 //	(heap + p)->dst->pos_type1 = 0; // not necessary
 	memcpy( heap + p, heap + (--*size), sizeof(struct idle_t) );
+	(heap + p)->dst->pos_type1 = p + 1;
 	type1_lift( heap - 1, p + 1 );
 	type1_sink( heap - 1, p + 1, *size );
 }
@@ -157,20 +160,23 @@ inline void init_type2( struct dstlist *const list) {
 inline void type2_delmin(struct idle_t *const heap, int *const size) {
 //	heap->dst->pos_type2 = 0; // not necessary
 	memcpy( heap, heap - (--*size), sizeof(struct idle_t) );
+	heap->dst->pos_type2 = 1;
 	type2_sink( heap + 1, 1, *size);
 }
 
 inline void type2_insert(struct idle_t *const heap, const long time,
-			 void *const dst, int *const size) {
+			 struct dstinfo *const dst, int *const size) {
 	(heap - *size)->time = time;
 	(heap - *size)->dst = dst;
-	type2_lift( heap + 1, ++(*size) );
+	dst->pos_type2 = ++(*size);
+	type2_lift( heap + 1, *size );
 }
 
 inline void type2_delete(struct idle_t *const heap, const int p,
 			 int *const size) {
 //	(heap - p)->dst->pos_type2 = 0; // not necessary
 	memcpy( heap - p, heap - (--*size), sizeof(struct idle_t) );
+	(heap - p)->dst->pos_type2 = p + 1;
 	type2_lift( heap + 1, p + 1 );
 	type2_sink( heap + 1, p + 1, *size );
 }
@@ -395,39 +401,39 @@ inline void supply_type2(struct dstlist *const list) {
 }
 
 inline struct dstinfo *get_type1(struct dstlist *const list) {
-	struct idle_t *idle = list->idle_type1;
+	struct dstinfo *dst = list->idle_type1->dst;
 
 	if (list->count_type1 == 0)
 		return NULL;
-	long time = idle->time - gettime();
+	long time = list->idle_type1->time - gettime();
 	if (time > 0) {
 		sleep(time / 1000);
 		usleep(1000 * (time % 1000));
 	}
-	type1_delmin( idle, &list->count_type1 );
-	if (idle->dst->type & HK_TYPE2) {
-		(list->idle_type2 - (idle->dst->pos_type2 - 1))->time += DAY_NS;
-		type2_sink( list->idle_type2 + 1, idle->dst->pos_type2, list->count_type2 );
+	type1_delmin( list->idle_type1, &list->count_type1 );
+	if (dst->type & HK_TYPE2) {
+		(list->idle_type2 - (dst->pos_type2 - 1))->time += DAY_NS;
+		type2_sink( list->idle_type2 + 1, dst->pos_type2, list->count_type2 );
 	}
 
-	return idle->dst;
+	return dst;
 }
 
 inline struct dstinfo *get_type2(struct dstlist *const list) {
-	struct idle_t *idle = list->idle_type2;
+	struct dstinfo *dst = list->idle_type2->dst;
 
-	if (list->count_type1 == 0)
+	if (list->count_type2 == 0)
 		return NULL;
-	long time = idle->time - gettime();
+	long time = list->idle_type2->time - gettime();
 	if (time > 0) {
 		sleep(time / 1000);
 		usleep(1000 * (time % 1000));
 	}
-	type2_delmin( idle, &list->count_type2 );
-	if (idle->dst->type & HK_TYPE1) {
-		(list->idle_type1 + (idle->dst->pos_type1 - 1))->time += DAY_NS;
-		type1_sink( list->idle_type1 - 1, idle->dst->pos_type1, list->count_type1 );
+	type2_delmin( list->idle_type2, &list->count_type2 );
+	if (dst->type & HK_TYPE1) {
+		(list->idle_type1 + (dst->pos_type1 - 1))->time += DAY_NS;
+		type1_sink( list->idle_type1 - 1, dst->pos_type1, list->count_type1 );
 	}
 
-	return idle->dst;
+	return dst;
 }
