@@ -87,7 +87,8 @@ void find_single(char *url, int len) {
 	hit = match_type(url, len);
 	if (hit == -1) {
 		perror("find_single");
-		inthandler(0);
+		printf("find_single: aborted.\n");
+		return;
 	}
 
 	a.c = 0;
@@ -105,7 +106,7 @@ void find_single(char *url, int len) {
 	}
 
 	if (hit == 0) {
-		printf("no keyword found\n");
+		printf("no keyword found.\n");
 		return;
 	}
 
@@ -292,7 +293,7 @@ int main(int argc, char *argv[]) {
 		fputs("dstlist initialize failed.\n", stderr);
 		return -1;
 	}
-	if (gk_cm_init(device, ip, dest, 0)) {
+	if (gk_cm_init(device, ip, dest, maxconn)) {
 		free_dstlist(dest);
 		fputs("gk_cm_init: failed.\n", stderr);
 		return -1;
@@ -355,6 +356,7 @@ int main(int argc, char *argv[]) {
 				find_multiple(line + offset, url_len);
 				break;
 			}
+			puts("");
 		}
 	}
 

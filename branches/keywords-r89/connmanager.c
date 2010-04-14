@@ -470,12 +470,7 @@ int gk_add_context(char * const content, const int length, char * const result, 
 		return -1;
 	pthread_mutex_lock(&mutex_conn);
 
-	/* new conn */
-	struct conncontent *conn;
-	conn = new_conn();
-	if (conn == NULL)
-		return -1;
-
+	struct conncontent *conn = new_conn();
 	conn->content = content;
 	conn->length = length;
 	conn->result = result;

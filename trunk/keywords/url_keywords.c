@@ -21,12 +21,9 @@ int mode = 1, local_mode, offset;
 double kps;
 struct dstlist *dest;
 
-pthread_mutex_t mutex_conn;
+pthread_mutex_t mutex_conn, mutex_hash;
 pthread_t gk_cm_bg;
-struct gk_cm_stat {
-	char running;
-	char context_add;
-} cm_status = {0, 0};
+char running = 0;
 
 #define HH_ADD_LEN 24
 #define HH_PRE_LEN 11
@@ -35,7 +32,7 @@ struct gk_cm_stat {
 static inline void quit() {
 	void *ret;
 
-	cm_status.running = 0;
+	running = 0;
 	pthread_join(gk_cm_bg, &ret);
 	pthread_mutex_lock(&mutex_conn);
 	gk_cm_finalize();
@@ -58,27 +55,31 @@ void release_single_query(char *content, char result, void *arg) {
 void gk_add_context_blocking(char * const content, const int length, char *const result, const int type, gk_callback_f cb, void *arg) {
 	int ret;
 	long time;
-	while (cm_status.running) {
+	while (running) {
 		pthread_mutex_lock(&mutex_conn);
+
 		ret = gk_add_context(content, length, result, type, cb, arg);
-		if (ret)
+		if (ret < 0) {
+			pthread_mutex_unlock(&mutex_conn);
+
 			time = gk_cm_conn_next_time() - gettime();
-		pthread_mutex_unlock(&mutex_conn);
-		if (ret) {
 			if (time / 1000)
 				sleep(time / 1000);
 			usleep(1000 * (time % 1000));
+
 			pthread_mutex_lock(&mutex_conn);
-			time = gk_cm_conn_step() - gettime();
-			pthread_mutex_unlock(&mutex_conn);
 		}
-		else
+		pthread_mutex_lock(&mutex_hash);
+		gk_cm_conn_step();
+		pthread_mutex_unlock(&mutex_hash);
+
+		pthread_mutex_unlock(&mutex_conn);
+		if (ret == 0)
 			break;
 	}
-	cm_status.context_add = 1;
 }
 
-void *gk_cm_loop(void *arg) {
+void *gk_cm_loop(void *running) {
 	long time, delta;
 	fd_set readfds;
 	struct timeval tv;
@@ -87,25 +88,25 @@ void *gk_cm_loop(void *arg) {
 	if (pcap_fd == -1)
 		return NULL;
 
-	while (((struct gk_cm_stat *)arg)->running) {
+	while (*(char *)running) {
 		pthread_mutex_lock(&mutex_conn);
 		time = gk_cm_conn_step();
-		((struct gk_cm_stat *)arg)->context_add = 0;
 		pthread_mutex_unlock(&mutex_conn);
 		if (time == -1)
 			delta = 1000;
 		else
 			delta = time - gettime();
 
-		while (((struct gk_cm_stat *)arg)->context_add == 0) {
-			if (delta <= 0)
-				break;
+		while (delta > 0) {
 			tv.tv_sec = delta / 1000;
-			tv.tv_usec = 1000 * ((delta + 999) % 1000);
+			tv.tv_usec = 1000 * (delta % 1000);
 			FD_ZERO(&readfds);
 			FD_SET(pcap_fd, &readfds);
-			if ((ret = select(pcap_fd + 1, &readfds, NULL, NULL, &tv)) == 1)
+			if ((ret = select(pcap_fd + 1, &readfds, NULL, NULL, &tv)) == 1) {
+				pthread_mutex_lock(&mutex_hash);
 				gk_cm_read_cap();
+				pthread_mutex_unlock(&mutex_hash);
+			}
 			delta = time - gettime();
 		}
 	}
@@ -113,8 +114,8 @@ void *gk_cm_loop(void *arg) {
 }
 
 void gk_cm_run() {
-	cm_status.running = 1;
-	pthread_create(&gk_cm_bg, NULL, gk_cm_loop, &cm_status);
+	running = 1;
+	pthread_create(&gk_cm_bg, NULL, gk_cm_loop, &running);
 }
 
 char match_type(char *url, int len) {
@@ -165,7 +166,8 @@ void find_single(char *url, int len) {
 	hit = match_type(url, len);
 	if (hit == -1) {
 		perror("find_single");
-		inthandler(0);
+		printf("find_single: aborted.\n");
+		return;
 	}
 
 	a.c = 0;
@@ -183,7 +185,7 @@ void find_single(char *url, int len) {
 	}
 
 	if (hit == 0) {
-		printf("no keyword found\n");
+		printf("no keyword found.\n");
 		return;
 	}
 
@@ -309,7 +311,7 @@ int main(int argc, char *argv[]) {
 		"MODE	  = \"s\" | \"ms\" | \"m\"\n"
 		"	   # s means single keyword\n"
 		"	   # ms means multiple simple keywords\n"
-		"	   # m means mutliple keywords\n%s", GK_OPT_SYNTAX);
+		"	   # m means mutliple keywords\n%s\n", GK_OPT_SYNTAX);
 
 
 	if (signal(SIGINT, inthandler) == SIG_ERR) {
@@ -370,13 +372,19 @@ int main(int argc, char *argv[]) {
 		fputs("dstlist initialize failed.\n", stderr);
 		return -1;
 	}
-	if (gk_cm_init(device, ip, dest, 0)) {
+	if (gk_cm_init(device, ip, dest, maxconn)) {
 		free_dstlist(dest);
 		free(cand);
 		fputs("gk_cm_init: failed.\n", stderr);
 		return -1;
 	}
 	if (pthread_mutex_init(&mutex_conn, NULL)) {
+		free_dstlist(dest);
+		free(cand);
+		perror("pthread_mutex_init");
+		return -1;
+	}
+	if (pthread_mutex_init(&mutex_hash, NULL)) {
 		free_dstlist(dest);
 		free(cand);
 		perror("pthread_mutex_init");
@@ -440,6 +448,7 @@ int main(int argc, char *argv[]) {
 				find_multiple(line + offset, url_len);
 				break;
 			}
+			puts("");
 		}
 	}
 
