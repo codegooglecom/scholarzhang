@@ -20,7 +20,10 @@ char GK_OPT_SYNTAX[] =
         "        | \"pps\" INTEGER # speed limit in packets/second\n"
         "                        # only one of these is accepted\n"
         "DSTLIST = DSTITEM [\",\" DSTLIST]\n"
-        "DSTITEM = IP[\"-\"IP]:PORT[-PORT]\n";
+        "DSTITEM = IP[\"-\"IP]:PORT[-PORT]\n"
+	"\n"
+	"device, ip, maxdst, dstlist and maxconn must be set before gk_cm_init()\n"
+	"and there is no effect on changing it online.\n";
 
 void gk_read_config(char *line, char *device, char *ip, int *maxconn, int *maxdst, char *candlist, char *times, int *time_interval, int *expire_timeout, int *tcp_mss, double *kps, int *pps) {
 #define PAR_LEN 20

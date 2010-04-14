@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-//#include <pthread.h>
 #include <pcap.h>
 #include <libnet.h>
 #include <netinet/ip.h>
@@ -73,9 +72,6 @@ static struct dstlist *dest = NULL;
 // static struct hash_t **hash = NULL;
 /* defined above, hash has capacity = event_capa * 3 */
 
-//static pthread_mutex_t mutex_conn, mutex_hash;
-//static pthread_t send_p, recv_p;
-
 static char times = 8;
 static int time_interval = 30;
 static int expire_timeout = 200;
@@ -121,8 +117,6 @@ static inline void empty_connlist() {
 static inline void clear_queue() {
 	struct conncontent *conn;
 
-	//pthread_mutex_lock(&mutex_conn);
-	//pthread_mutex_lock(&mutex_hash);
 	while (event_count) {
 		conn = event->data;
 		if (conn->dst)
@@ -131,8 +125,6 @@ static inline void clear_queue() {
 		conn->callback(conn->content, HK_TO_ST_TYPE(conn->type) | STATUS_ERROR, conn->arg);
 		del_conn(conn);
 	}
-	//pthread_mutex_unlock(&mutex_hash);
-	//pthread_mutex_unlock(&mutex_conn);
 }
 
 static inline char sendpacket(char times, long *time, u_int32_t sa, u_int32_t da, u_int16_t sp, u_int16_t dp, u_int8_t flag, u_int32_t seq, u_int32_t ack, u_int8_t *payload, u_int16_t len) {
@@ -168,198 +160,195 @@ long gk_cm_conn_step() {
 	static char status;
 	static char type;
 	static u_int16_t piece;
-	static long time;
+	static long inittime, time;
 
 	if (event_count == 0)
 		return -1;
-	time = gettime();
-	if (time < event->time)
+	inittime = gettime();
+	if (inittime < event->time)
 		return event->time;
 
-	//pthread_mutex_lock(&mutex_conn);
-	conn = event->data;
-	status = conn->status & STATUS_MASK;
-	type = conn->type;
+	time = inittime;
+	do {
+		conn = event->data;
+		status = conn->status & STATUS_MASK;
+		type = conn->type;
 
-	if (status == 5) {
-		char result = conn->hit;
-		if (conn->status & STATUS_CHECK) {
-			/* connection with this dst finished,
-			   if it does not work with this GFW
-			   type, we will set status = 0
-			   again */
-			//pthread_mutex_lock(&mutex_hash);
-			if (result & type) {
-				// GFW's working, so this is not a keyword
-				if (conn->result) *conn->result = 0;
-				conn->callback(conn->content, HK_TO_ST_TYPE(type) | result, conn->arg);
-				heap_delmin(event, &event_count);
-				del_conn(conn);
+		if (status == 5) {
+			char result = conn->hit;
+			if (conn->status & STATUS_CHECK) {
+				/* connection with this dst finished,
+				   if it does not work with this GFW
+				   type, we will set status = 0
+				   again */
+				if (result & type) {
+					// GFW's working, so this is not a keyword
+					if (conn->result) *conn->result = 0;
+					conn->callback(conn->content, HK_TO_ST_TYPE(type) | result, conn->arg);
+					heap_delmin(event, &event_count);
+					del_conn(conn);
+				}
+				else {
+					/* else we know nothing about if it
+					   contains any keyword. */
+					fprintf(stderr, "[information]: GFW type%d is not working on (local:%d, %s:%d).\n", type, conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
+					conn->status = 0;
+					conn->hit = 0;
+					status = 0;
+				}
+				return_dst_delete_hash(dest, conn->dst, type, STATUS_CHECK | HK_TO_ST_TYPE(result), conn->hash);
+				if (result & type)
+					goto round;
+			}
+			else if ((result & type) == 0) {
+				/* GFW no response to this type check
+				   if GFW is working on this (da,
+				   dp) */
+				status = 1;
+				conn->status = STATUS_CHECK | 1;
+				conn->times = times;
 			}
 			else {
-				/* else we know nothing about if it
-				   contains any keyword. */
-				fprintf(stderr, "[information]: GFW type%d is not working on (local:%d, %s:%d).\n", type, conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
-				conn->status = 0;
-				conn->hit = 0;
-				status = 0;
+				// Hit or in consequent resetting status
+				if (conn->status & STATUS_ERROR) {
+					conn->status = 0;
+					conn->hit = 0;
+					status = 0;
+				}
+				else {
+					//fprintf(stderr, "result: %d, (local:%d, %s:%d)\n", result, conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
+					if (conn->result) *conn->result = result;
+					conn->callback(conn->content, HK_TO_ST_TYPE(type) | result, conn->arg);
+					heap_delmin(event, &event_count);
+					del_conn(conn);
+				}
+				return_dst_delete_hash(dest, conn->dst, type, HK_TO_ST_TYPE(result), conn->hash);
+				if ((conn->status & STATUS_ERROR) == 0)
+					goto round;
 			}
-			return_dst_delete_hash(dest, conn->dst, type, STATUS_CHECK | HK_TO_ST_TYPE(result), conn->hash);
-			//pthread_mutex_unlock(&mutex_hash);
-			if (result & type)
-				goto unlock;
-		}
-		else if ((result & type) == 0) {
-			/* GFW no response to this type check
-			   if GFW is working on this (da,
-			   dp) */
-			status = 1;
-			conn->status = STATUS_CHECK | 1;
-			conn->times = times;
-		}
-		else {
-			// Hit or in consequent resetting status
-			//pthread_mutex_lock(&mutex_hash);
-			if (conn->status & STATUS_ERROR) {
-				conn->status = 0;
-				conn->hit = 0;
-				status = 0;
-			}
-			else {
-				//fprintf(stderr, "result: %d, (local:%d, %s:%d)\n", result, conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
-				if (conn->result) *conn->result = result;
-				conn->callback(conn->content, HK_TO_ST_TYPE(type) | result, conn->arg);
-				heap_delmin(event, &event_count);
-				del_conn(conn);
-			}
-			return_dst_delete_hash(dest, conn->dst, type, HK_TO_ST_TYPE(result), conn->hash);
-			//pthread_mutex_unlock(&mutex_hash);
-			if ((conn->status & STATUS_ERROR) == 0)
-				goto unlock;
-		}
-	}
-
-	//int i;
-	switch (status) {
-	case 0:
-		//for (i = 11; conn->content[i] != ' '; ++i)
-		//	putchar(conn->content[i]);
-		//putchar(' ');
-		conn->sp = libnet_get_prand(LIBNET_PR16) + 32768;
-		conn->dst = (type == HK_TYPE1)?
-			get_type1(dest, &time):
-			get_type2(dest, &time);
-		if (conn->dst == NULL) {
-			// there is no (da, dp) available currently
-			event->time = time;
-			goto next;
-		}
-		else {
-			//printf("(local:%d, %s:%d)\n", conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
-			//pthread_mutex_lock(&mutex_hash);
-			conn->hash = hash_insert(conn->dst->da, conn->dst->dport, conn);
-			//pthread_mutex_unlock(&mutex_hash);
-		}
-		conn->times = times;
-
-	case 1:
-		if (conn->times == times)
-			conn->seq = libnet_get_prand(LIBNET_PR32);
-		conn->times -= sendpacket(conn->times, &time, sa, conn->dst->da, conn->sp, conn->dst->dport, TH_SYN, conn->seq++, 0, NULL, 0);
-		if (conn->times > 0) {
-			event->time = time;
-			goto next;
-		}
-		else {
-			conn->status = (conn->status & ~STATUS_MASK) | 2;
-			conn->times = times;
-		}
-		break;
-
-	case 2:
-		if (conn->times == times)
-			conn->ack = libnet_get_prand(LIBNET_PR32) + 1;
-		conn->times -= sendpacket(conn->times, &time, sa, conn->dst->da, conn->sp, conn->dst->dport, TH_ACK, conn->seq, conn->ack, NULL, 0);
-		if (conn->times > 0) {
-			event->time = time;
-			goto next;
-		}
-		else {
-			conn->next = 0;
-			conn->status = (conn->status & ~STATUS_MASK) | 3;
-			conn->times = times << 1;
-		}
-		break;
-
-	case 3:
-		piece = ((conn->status & STATUS_CHECK)?youtube_len:conn->length) - conn->next;
-		type = TH_ACK|TH_PUSH;
-		if (piece > tcp_mss)
-			piece = tcp_mss;
-		else {
-			status = 4;
-			type |= TH_FIN;
 		}
 
-		if (conn->times > times) {
-			conn->times -= sendpacket(conn->times - times, &time, sa, conn->dst->da, conn->sp, conn->dst->dport, type, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, (u_int8_t *)((conn->status & STATUS_CHECK)?youtube:conn->content) + conn->next, piece);
-			if (conn->times == times) {
-				conn->next += piece;
-				if (status != 4)
-					conn->times = times << 1;
-			}
-			else {
+		//int i;
+		switch (status) {
+		case 0:
+			//for (i = 11; conn->content[i] != ' '; ++i)
+			//	putchar(conn->content[i]);
+			//putchar(' ');
+			conn->sp = libnet_get_prand(LIBNET_PR16) + 32768;
+			conn->dst = (type == HK_TYPE1)?
+				get_type1(dest, &time):
+				get_type2(dest, &time);
+			if (conn->dst == NULL) {
+				// there is no (da, dp) available currently
 				event->time = time;
 				goto next;
 			}
-		}
-		if (conn->times <= times) {
-			conn->times -= sendpacket(conn->times, &time, sa, conn->dst->da, conn->sp, conn->dst->dport, TH_ACK, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, NULL, 0);
+			else {
+				//printf("(local:%d, %s:%d)\n", conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
+				conn->hash = hash_insert(conn->dst->da, conn->dst->dport, conn);
+			}
+			conn->times = times;
+
+		case 1:
+			if (conn->times == times)
+				conn->seq = libnet_get_prand(LIBNET_PR32);
+			conn->times -= sendpacket(conn->times, &time, sa, conn->dst->da, conn->sp, conn->dst->dport, TH_SYN, conn->seq++, 0, NULL, 0);
 			if (conn->times > 0) {
 				event->time = time;
 				goto next;
 			}
 			else {
+				conn->status = (conn->status & ~STATUS_MASK) | 2;
+				conn->times = times;
+			}
+			break;
+
+		case 2:
+			if (conn->times == times)
+				conn->ack = libnet_get_prand(LIBNET_PR32) + 1;
+			conn->times -= sendpacket(conn->times, &time, sa, conn->dst->da, conn->sp, conn->dst->dport, TH_ACK, conn->seq, conn->ack, NULL, 0);
+			if (conn->times > 0) {
+				event->time = time;
+				goto next;
+			}
+			else {
+				conn->next = 0;
+				conn->status = (conn->status & ~STATUS_MASK) | 3;
 				conn->times = times << 1;
-				conn->status = (conn->status & ~STATUS_MASK) | 4;
 			}
-		}
-		break;
+			break;
 
-	case 4:
-		if (conn->times == times << 1)
-			conn->new_seq = libnet_get_prand(LIBNET_PR32);
-		if (conn->times > times) {
-			conn->times -= sendpacket(conn->times - times, &time, sa, conn->dst->da, conn->sp, conn->dst->dport, TH_SYN, conn->new_seq++, 0, NULL, 0);
+		case 3:
+			piece = ((conn->status & STATUS_CHECK)?youtube_len:conn->length) - conn->next;
+			type = TH_ACK|TH_PUSH;
+			if (piece > tcp_mss)
+				piece = tcp_mss;
+			else {
+				status = 4;
+				type |= TH_FIN;
+			}
+
 			if (conn->times > times) {
-				event->time = time;
-				goto next;
+				conn->times -= sendpacket(conn->times - times, &time, sa, conn->dst->da, conn->sp, conn->dst->dport, type, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, (u_int8_t *)((conn->status & STATUS_CHECK)?youtube:conn->content) + conn->next, piece);
+				if (conn->times == times) {
+					conn->next += piece;
+					if (status != 4)
+						conn->times = times << 1;
+				}
+				else {
+					event->time = time;
+					goto next;
+				}
 			}
-		}
-		if (conn->times <= times) {
-			conn->times -= sendpacket(conn->times, &time, sa, conn->dst->da, conn->sp, conn->dst->dport, TH_RST, conn->new_seq, 0, NULL, 0);
-			if (conn->times > 0) {
-				event->time = time;
-				goto next;
+			if (conn->times <= times) {
+				conn->times -= sendpacket(conn->times, &time, sa, conn->dst->da, conn->sp, conn->dst->dport, TH_ACK, conn->seq + conn->next, conn->ack + 1 + conn->next / tcp_mss % 16384, NULL, 0);
+				if (conn->times > 0) {
+					event->time = time;
+					goto next;
+				}
+				else {
+					conn->times = times << 1;
+					conn->status = (conn->status & ~STATUS_MASK) | 4;
+				}
 			}
-			else
-				conn->status = (conn->status & ~STATUS_MASK) | 5;
-		}
-		break;
-	}
+			break;
 
-	if (status != 4)
-		event->time = time + time_interval;
-	else
-		event->time = time + expire_timeout;
-next:
-	heap_sink(event - 1, 1, event_count);
-unlock:
-	//pthread_mutex_unlock(&mutex_conn);
-	if (event_count)
-		return event->time;
-	else
-		return -1;
+		case 4:
+			if (conn->times == times << 1)
+				conn->new_seq = libnet_get_prand(LIBNET_PR32);
+			if (conn->times > times) {
+				conn->times -= sendpacket(conn->times - times, &time, sa, conn->dst->da, conn->sp, conn->dst->dport, TH_SYN, conn->new_seq++, 0, NULL, 0);
+				if (conn->times > times) {
+					event->time = time;
+					goto next;
+				}
+			}
+			if (conn->times <= times) {
+				conn->times -= sendpacket(conn->times, &time, sa, conn->dst->da, conn->sp, conn->dst->dport, TH_RST, conn->new_seq, 0, NULL, 0);
+				if (conn->times > 0) {
+					event->time = time;
+					goto next;
+				}
+				else
+					conn->status = (conn->status & ~STATUS_MASK) | 5;
+			}
+			break;
+		}
+
+		if (status != 4)
+			event->time = time + time_interval;
+		else
+			event->time = time + expire_timeout;
+	next:
+		heap_sink(event - 1, 1, event_count);
+	round:
+		if (event_count)
+			time = event->time;
+		else
+			time = -1;
+	} while (time == inittime);
+
+	return time;
 }
 
 int gk_cm_fd() {
@@ -377,36 +366,36 @@ void gk_cm_read_cap() {
 	static u_int32_t hit_range;
 	static u_int32_t seq;
 
-	ret = pcap_next_ex(pd, &pkthdr, &wire);
-	if (ret != 1) {
-		if (ret == -1)
-			pcap_perror(pd, "listen_for_gfw");
-		return;
-	}
-	switch(linktype){
-	case DLT_EN10MB:
-		if (pkthdr->caplen < 14)
+	while (1) {
+		ret = pcap_next_ex(pd, &pkthdr, &wire);
+		if (ret != 1) {
+			if (ret == -1)
+				pcap_perror(pd, "listen_for_gfw");
 			return;
-		if (wire[12] == 8 && wire[13] == 0) {
-			linkoffset = 14;
-		} else if (wire[12] == 0x81 && wire[13] == 0) {
-			linkoffset = 18;
-		} else
+		}
+		switch(linktype){
+		case DLT_EN10MB:
+			if (pkthdr->caplen < 14)
+				return;
+			if (wire[12] == 8 && wire[13] == 0) {
+				linkoffset = 14;
+			} else if (wire[12] == 0x81 && wire[13] == 0) {
+				linkoffset = 18;
+			} else
+				return;
+			break;
+		}
+		if (pkthdr->caplen < linkoffset)
 			return;
-		break;
-	}
-	if (pkthdr->caplen < linkoffset)
-		return;
-	iph = (struct iphdr *)(wire + linkoffset);
-	tcph = (struct tcphdr *)(wire + linkoffset + (iph->ihl << 2));
+		iph = (struct iphdr *)(wire + linkoffset);
+		tcph = (struct tcphdr *)(wire + linkoffset + (iph->ihl << 2));
 
-	//pthread_mutex_lock(&mutex_hash);
-	conn = hash_match(iph->saddr, ntohs(tcph->source));
-	if (conn == NULL || conn->sp != ntohs(tcph->dest))
-		goto release;
-	type = FP_TO_HK_TYPE(gfw_fingerprint(wire + linkoffset));
-	if (type == 0)
-		goto release;
+		conn = hash_match(iph->saddr, ntohs(tcph->source));
+		if (conn == NULL || conn->sp != ntohs(tcph->dest))
+			continue;
+		type = FP_TO_HK_TYPE(gfw_fingerprint(wire + linkoffset));
+		if (type == 0)
+			continue;
 
 #define WRONG {                                         \
 if (ST_TO_HK_TYPE(conn->status) == type) {      \
@@ -425,62 +414,60 @@ if (ST_TO_HK_TYPE(conn->status) == type) {      \
 }                                                                       \
                 }
 
-	if (tcph->syn) {
-		if (type == 2) {
-			conn->hit |= HK_TYPE2;
-			seq = ntohl(tcph->ack_seq);
-			if ( ((conn->status & STATUS_MASK) < 4 || seq != conn->new_seq )
-			     && (seq != conn->seq || (conn->status & STATUS_CHECK) == 0) )
-				WRONG
-					}
-	}
-	else {
-		hit_range = conn->ack + 1 + (((conn->status & STATUS_CHECK)?youtube_len:conn->length) + tcp_mss - 1) / tcp_mss;
-		seq = ntohl(tcph->seq);
-
-		if (type == 1) {
-			conn->hit |= HK_TYPE1;
-			if (conn->status & STATUS_CHECK) {
-				if (seq < conn->ack || seq > hit_range || (conn->status & STATUS_MASK) < 2)
+		if (tcph->syn) {
+			if (type == 2) {
+				conn->hit |= HK_TYPE2;
+				seq = ntohl(tcph->ack_seq);
+				if ( ((conn->status & STATUS_MASK) < 4 || seq != conn->new_seq )
+				     && (seq != conn->seq || (conn->status & STATUS_CHECK) == 0) )
 					WRONG
-						}
-			else {
-				if (seq <= conn->ack || seq > hit_range || (conn->status & STATUS_MASK) < 3)
-					WRONG
-//					else
-//						conn->hit_at = seq - conn->ack - 1;
-						}
+			}
 		}
 		else {
-			conn->hit |= HK_TYPE2;
-			if ( (conn->status & STATUS_CHECK) == 0	 ) {
-				if ( (ntohl(tcph->ack_seq) != conn->new_seq) || (conn->status & STATUS_MASK) < 4 ) {
-					if ((conn->status & STATUS_MASK) < 3)
+			hit_range = conn->ack + 1 + (((conn->status & STATUS_CHECK)?youtube_len:conn->length) + tcp_mss - 1) / tcp_mss;
+			seq = ntohl(tcph->seq);
+
+			if (type == 1) {
+				conn->hit |= HK_TYPE1;
+				if (conn->status & STATUS_CHECK) {
+					if (seq < conn->ack || seq > hit_range || (conn->status & STATUS_MASK) < 2)
 						WRONG
+				}
+				else {
+					if (seq <= conn->ack || seq > hit_range || (conn->status & STATUS_MASK) < 3)
+						WRONG
+//					else
+//						conn->hit_at = seq - conn->ack - 1;
+				}
+			}
+			else {
+				conn->hit |= HK_TYPE2;
+				if ( (conn->status & STATUS_CHECK) == 0	 ) {
+					if ( (ntohl(tcph->ack_seq) != conn->new_seq) || (conn->status & STATUS_MASK) < 4 ) {
+						if ((conn->status & STATUS_MASK) < 3)
+							WRONG
 						else if (seq > hit_range) {
 							seq -= 1460;
 							if (seq > hit_range) {
 								seq -= 2920;
 								if (seq <= conn->ack)
 									WRONG
-										}
+							}
 							if (seq <= conn->ack)
 								WRONG
-									}
+										}
 						else if (seq <= conn->ack)
 							WRONG
 //						else {
 //							conn->hit_at = seq - conn->ack - 1;
-//							fputs("[Warning]: Special network environment. Please send the IP block of your ISP with this information to https://groups.google.com/scholarzhang-dev .\n", stderr);
+//							fputs("[Information]: Special network environment. Please send the IP block of your ISP with this information to https://groups.google.com/scholarzhang-dev .\n", stderr);
 //						}
-								}
+					}
+				}
 			}
 		}
-	}
 #undef WRONG
-release:
-	;
-	//pthread_mutex_unlock(&mutex_hash);
+	}
 }
 
 /* connmanager */
@@ -506,14 +493,8 @@ void gk_cm_config(char _times, int _time_interval, int _expire_timeout, int _tcp
 int gk_add_context(char * const content, const int length, char * const result, const int type, gk_callback_f cb, void *arg) {
 	if (event_count == event_capa)
 		return -1;
-	//pthread_mutex_lock(&mutex_conn);
 
-	/* new conn */
-	struct conncontent *conn;
-	conn = new_conn();
-	if (conn == NULL)
-		return -1;
-
+	struct conncontent *conn = new_conn();
 	conn->content = content;
 	conn->length = length;
 	conn->result = result;
@@ -526,18 +507,10 @@ int gk_add_context(char * const content, const int length, char * const result, 
 	conn->arg = arg;
 
 	heap_insert(event, gettime(), conn, &event_count);
-	//pthread_mutex_unlock(&mutex_conn);
-	//if (running != 0) {
-	//	clear_queue();
-	//	return -2;
-	//}
 	return 0;
 }
 
 void gk_cm_finalize() {
-	//pthread_mutex_destroy(&mutex_conn);
-	//pthread_mutex_destroy(&mutex_hash);
-
 	clear_queue();
 	hash_empty(3 * event_capa);
 	free(event);
@@ -560,16 +533,6 @@ int gk_cm_init(char *device, char *ip, struct dstlist *list, int capa) {
 		strcpy(device, alldevsp->name);
 		pcap_freealldevs(alldevsp);
 	}
-
-	//if (pthread_mutex_init(&mutex_conn, NULL)) {
-	//	perror("pthread_mutex_init");
-	//	return -1;
-	//}
-	//if (pthread_mutex_init(&mutex_hash, NULL)) {
-	//	pthread_mutex_destroy(&mutex_conn);
-	//	perror("pthread_mutex_init");
-	//	return -1;
-	//}
 
 	if (list == NULL)
 		return -1;
