@@ -60,14 +60,16 @@ void gk_add_context_blocking(char * const content, const int length, char *const
 
 		ret = gk_add_context(content, length, result, type, cb, arg);
 		if (ret < 0) {
-			pthread_mutex_unlock(&mutex_conn);
-
 			time = gk_cm_conn_next_time() - gettime();
-			if (time / 1000)
-				sleep(time / 1000);
-			usleep(1000 * (time % 1000));
+			if (time > 0) {
 
-			pthread_mutex_lock(&mutex_conn);
+				pthread_mutex_unlock(&mutex_conn);
+				if (time / 1000)
+					sleep(time / 1000);
+				usleep(1000 * (time % 1000));
+				pthread_mutex_lock(&mutex_conn);
+
+			}
 		}
 		pthread_mutex_lock(&mutex_hash);
 		gk_cm_conn_step();
@@ -134,13 +136,11 @@ char match_type(char *url, int len) {
 	sem_init(&sem, 0, 0);
 	gk_add_context_blocking(content, len + HH_ADD_LEN, &result2, HK_TYPE2, release_single_query, &sem);
 	sem_wait(&sem);
-	if (result2 & HK_TYPE1)
-		result1 = HK_TYPE1;
-	else {
-		content[len + HH_ADD_LEN - 4] = '\n';
-		gk_add_context_blocking(content, len + HH_ADD_LEN - 2, &result1, HK_TYPE1, release_single_query, &sem);
-		sem_wait(&sem);
-	}
+
+	content[len + HH_ADD_LEN - 4] = '\n';
+	gk_add_context_blocking(content, len + HH_ADD_LEN - 2, &result1, HK_TYPE1, release_single_query, &sem);
+	sem_wait(&sem);
+
 	free(content);
 	sem_destroy(&sem);
 

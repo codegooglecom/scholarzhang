@@ -158,7 +158,7 @@ inline long gk_cm_conn_next_time() {
 long gk_cm_conn_step() {
 	static struct conncontent *conn;
 	static char status;
-	static char type;
+	static char type, result, hit;
 	static u_int16_t piece;
 	static long inittime, time;
 
@@ -175,13 +175,14 @@ long gk_cm_conn_step() {
 		type = conn->type;
 
 		if (status == 5) {
-			char result = conn->hit;
+			hit = conn->hit;
+			result = hit & type;
 			if (conn->status & STATUS_CHECK) {
 				/* connection with this dst finished,
 				   if it does not work with this GFW
 				   type, we will set status = 0
 				   again */
-				if (result & type) {
+				if (result) {
 					// GFW's working, so this is not a keyword
 					if (conn->result) *conn->result = 0;
 					conn->callback(conn->content, HK_TO_ST_TYPE(type) | result, conn->arg);
@@ -196,11 +197,11 @@ long gk_cm_conn_step() {
 					conn->hit = 0;
 					status = 0;
 				}
-				return_dst_delete_hash(dest, conn->dst, type, STATUS_CHECK | HK_TO_ST_TYPE(result), conn->hash);
-				if (result & type)
+				return_dst_delete_hash(dest, conn->dst, type, STATUS_CHECK | HK_TO_ST_TYPE(hit), conn->hash);
+				if (result)
 					goto round;
 			}
-			else if ((result & type) == 0) {
+			else if (result == 0) {
 				/* GFW no response to this type check
 				   if GFW is working on this (da,
 				   dp) */
@@ -209,20 +210,20 @@ long gk_cm_conn_step() {
 				conn->times = times;
 			}
 			else {
-				// Hit or in consequent resetting status
+				// Hit or in secondary resetting status
 				if (conn->status & STATUS_ERROR) {
 					conn->status = 0;
 					conn->hit = 0;
 					status = 0;
 				}
 				else {
-					//fprintf(stderr, "result: %d, (local:%d, %s:%d)\n", result, conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
+					//fprintf(stderr, "hit: %d, (local:%d, %s:%d)\n", hit, conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), conn->dst->dport);
 					if (conn->result) *conn->result = result;
 					conn->callback(conn->content, HK_TO_ST_TYPE(type) | result, conn->arg);
 					heap_delmin(event, &event_count);
 					del_conn(conn);
 				}
-				return_dst_delete_hash(dest, conn->dst, type, HK_TO_ST_TYPE(result), conn->hash);
+				return_dst_delete_hash(dest, conn->dst, type, HK_TO_ST_TYPE(hit), conn->hash);
 				if ((conn->status & STATUS_ERROR) == 0)
 					goto round;
 			}

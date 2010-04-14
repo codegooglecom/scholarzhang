@@ -9,6 +9,7 @@ char GK_OPT_SYNTAX[] =
         "        | \"maxconn\" INTEGER\n"
         "        | \"maxdst\" INTEGER\n"
         "        | (\"d\" | \"dstlist\") DSTLIST\n"
+	"        | \"w\" INTEGER # control_wait (unit in ms)\n"
         "        | \"x\" INTEGER # repeat times of each packet\n"
         "        | (\"t\" | \"interval\") INTEGER\n"
         "          # sleeping time between two packet in a single\n"
