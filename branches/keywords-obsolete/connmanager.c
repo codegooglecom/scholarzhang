@@ -131,7 +131,7 @@ static inline void clear_queue() {
 			return_dst_delete_hash(dest, conn->dst, ST_TO_HK_TYPE(conn->status), HK_TO_ST_TYPE(conn->hit), conn->hash);
 		}
 		heap_delmin(event, &event_count);
-		conn->callback(conn->content, STATUS_ERROR, conn->arg);
+		conn->callback(conn->content, (conn->status & (STATUS_TYPE1 | STATUS_TYPE2)) | RESULT_ERROR, conn->arg);
 		del_conn(conn);
 	}
 	pthread_mutex_unlock(&mutex_hash);
@@ -203,7 +203,7 @@ static void *event_loop(void *running) {
 				if (result) {
 					// GFW's working, so this is not a keyword
 					if (conn->result) *conn->result = 0;
-					conn->callback(conn->content, HK_TO_ST_TYPE(type) | result, conn->arg);
+					conn->callback(conn->content, HK_TO_ST_TYPE(type), conn->arg);
 					heap_delmin(event, &event_count);
 					del_conn(conn);
 				}
@@ -475,7 +475,7 @@ int gk_add_context(char * const content, const int length, char * const result, 
 	conn->content = content;
 	conn->length = length;
 	conn->result = result;
-	if (result) *result = STATUS_ERROR;
+	if (result) *result = RESULT_ERROR;
 	conn->status = HK_TO_ST_TYPE(type);
 	conn->hit = 0;
 	conn->callback = cb;

@@ -122,7 +122,7 @@ static inline void clear_queue() {
 		if (conn->dst)
 			return_dst_delete_hash(dest, conn->dst, conn->type, HK_TO_ST_TYPE(conn->hit), conn->hash);
 		heap_delmin(event, &event_count);
-		conn->callback(conn->content, HK_TO_ST_TYPE(conn->type) | STATUS_ERROR, conn->arg);
+		conn->callback(conn->content, HK_TO_ST_TYPE(conn->type) | RESULT_ERROR, conn->arg);
 		del_conn(conn);
 	}
 }
@@ -185,9 +185,8 @@ long gk_cm_conn_step() {
 				if (result) {
 					// GFW's working, so this is not a keyword
 					if (conn->result) *conn->result = 0;
-					conn->callback(conn->content, HK_TO_ST_TYPE(type) | result, conn->arg);
+					conn->callback(conn->content, HK_TO_ST_TYPE(type), conn->arg);
 					heap_delmin(event, &event_count);
-					del_conn(conn);
 				}
 				else {
 					/* else we know nothing about if it
@@ -198,8 +197,15 @@ long gk_cm_conn_step() {
 					status = 0;
 				}
 				return_dst_delete_hash(dest, conn->dst, type, STATUS_CHECK | HK_TO_ST_TYPE(hit), conn->hash);
-				if (result)
+				if (conn->status & STATUS_ERROR) {
+					conn->status = 0;
+					conn->hit = 0;
+					status = 0;
+				}
+				else if (result) {
+					del_conn(conn);
 					goto round;
+				}
 			}
 			else if (result == 0) {
 				/* GFW no response to this type check
@@ -398,29 +404,28 @@ void gk_cm_read_cap() {
 		if (type == 0)
 			continue;
 
-#define WRONG {                                         \
-if (ST_TO_HK_TYPE(conn->status) == type) {      \
-        fputs("[Warning]: Unexpected RESET from GFW. "                  \
-              "The result must be wrong. Stop other applications which " \
-              "is connecting the same host:port connected with this "   \
-              "application, or adjust the application parameters. "     \
-              "Resume keyword testing after 90 seconds.\n", stderr);    \
-        fprintf(stderr, "type%d, flag:%s%s%s, (local:%d, %s:%d), seq: %u, " \
-                "ack: %u, conn->seq: %u, conn->ack: %u, conn->new_seq: %u, " \
-                "conn->status: %x\n", type, tcph->syn?"s":"", tcph->rst?"r":"", \
-                tcph->ack?"a":"", conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), \
-                conn->dst->dport, ntohl(tcph->seq), ntohl(tcph->ack_seq), \
-                conn->seq, conn->ack, conn->new_seq, conn->status);     \
-        conn->status |= STATUS_ERROR;                                   \
-}                                                                       \
-                }
+#define WRONG {						\
+if (ST_TO_HK_TYPE(conn->status) == type) {	\
+	fputs("[Warning]: Unexpected RESET from GFW. "			\
+	      "The result must be wrong. Stop other applications which " \
+	      "is connecting the same host:port connected with this "	\
+	      "application, or adjust the application parameters. "	\
+	      "Resume keyword testing after 90 seconds.\n", stderr);	\
+	fprintf(stderr, "type%d, flag:%s%s%s, (local:%d, %s:%d), seq: %u, " \
+		"ack: %u, conn->seq: %u, conn->ack: %u, conn->new_seq: %u, " \
+		"conn->status: %x\n", type, tcph->syn?"s":"", tcph->rst?"r":"", \
+		tcph->ack?"a":"", conn->sp, inet_ntoa(*(struct in_addr *)&conn->dst->da), \
+		conn->dst->dport, ntohl(tcph->seq), ntohl(tcph->ack_seq), \
+		conn->seq, conn->ack, conn->new_seq, conn->status);	\
+	conn->status |= STATUS_ERROR;					\
+}									\
+		}
 
 		if (tcph->syn) {
 			if (type == 2) {
 				conn->hit |= HK_TYPE2;
 				seq = ntohl(tcph->ack_seq);
-				if ( ((conn->status & STATUS_MASK) < 4 || seq != conn->new_seq )
-				     && (seq != conn->seq || (conn->status & STATUS_CHECK) == 0) )
+				if ( (conn->status & STATUS_MASK) < 4 || seq != conn->new_seq )
 					WRONG
 			}
 		}
@@ -430,40 +435,32 @@ if (ST_TO_HK_TYPE(conn->status) == type) {      \
 
 			if (type == 1) {
 				conn->hit |= HK_TYPE1;
-				if (conn->status & STATUS_CHECK) {
-					if (seq < conn->ack || seq > hit_range || (conn->status & STATUS_MASK) < 2)
-						WRONG
-				}
-				else {
-					if (seq <= conn->ack || seq > hit_range || (conn->status & STATUS_MASK) < 3)
-						WRONG
-//					else
-//						conn->hit_at = seq - conn->ack - 1;
-				}
+				if (seq <= conn->ack || seq > hit_range || (conn->status & STATUS_MASK) < 3)
+					WRONG
+//				else
+//					conn->hit_at = seq - conn->ack - 1;
 			}
 			else {
 				conn->hit |= HK_TYPE2;
-				if ( (conn->status & STATUS_CHECK) == 0	 ) {
-					if ( (ntohl(tcph->ack_seq) != conn->new_seq) || (conn->status & STATUS_MASK) < 4 ) {
-						if ((conn->status & STATUS_MASK) < 3)
-							WRONG
-						else if (seq > hit_range) {
-							seq -= 1460;
-							if (seq > hit_range) {
-								seq -= 2920;
-								if (seq <= conn->ack)
-									WRONG
-							}
+				if ( (ntohl(tcph->ack_seq) != conn->new_seq) || (conn->status & STATUS_MASK) < 4 ) {
+					if ((conn->status & STATUS_MASK) < 3)
+						WRONG
+					else if (seq > hit_range) {
+						seq -= 1460;
+						if (seq > hit_range) {
+							seq -= 2920;
 							if (seq <= conn->ack)
 								WRONG
-										}
-						else if (seq <= conn->ack)
+						}
+						if (seq <= conn->ack)
 							WRONG
-//						else {
-//							conn->hit_at = seq - conn->ack - 1;
-//							fputs("[Information]: Special network environment. Please send the IP block of your ISP with this information to https://groups.google.com/scholarzhang-dev .\n", stderr);
-//						}
 					}
+					else if (seq <= conn->ack)
+						WRONG
+//					else {
+//						conn->hit_at = seq - conn->ack - 1;
+//						fputs("[Information]: Special network environment. Please send the IP block of your ISP with this information to https://groups.google.com/scholarzhang-dev .\n", stderr);
+//					}
 				}
 			}
 		}
@@ -500,7 +497,7 @@ int gk_add_context(char * const content, const int length, char * const result, 
 	conn->length = length;
 	conn->result = result;
 	if (result)
-		*result = STATUS_ERROR;
+		*result = RESULT_ERROR;
 	conn->status = 0;
 	conn->type = type;
 	conn->hit = 0;

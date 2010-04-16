@@ -1,0 +1,96 @@
+#!/bin/bash
+
+. guk_common.h
+
+usage() {
+    cat << EOF
+USAGE: $0 [OPTIONS] url
+
+url must not contain "http://" prefix, and it must be exactly the
+same as it is written in the http packet.
+
+OPTIONS:
+   -a <abstract_path> : server's abstract unix domain socket path.
+   -U <unix_path>     : server's unix domain socket path.
+EOF
+}
+
+ABSTRACT=$GUK_ABSTRACT_SERV_PATH
+UNIX=
+
+while getopts "a:U:" OPTION; do
+    case $OPTION in
+	h)
+	    usage
+	    exit 1
+	    ;;
+	a)
+	    ABSTRACT=$OPTARG
+	    UNIX=
+	    ;;
+	U)
+	    if [ -z $OPTARG ]; then
+		UNIX=$GUK_UNIX_SERV_PATH
+	    else
+		UNIX=$OPTARG
+	    fi
+	    ABSTRACT=
+	    ;;
+	?)
+	    usage
+	    exit 1
+	    ;;
+    esac
+done
+
+if [ -z $ABSTRACT ]; then
+    SOCAT_OPT="-t 20 unix-connect:$UNIX -"
+else
+    SOCAT_OPT="-t 20 abstract-connect:$ABSTRACT -"
+fi
+
+while read URL; do
+    hit=0
+    recv=0
+    while read seq result; do
+	recv=$(($recv | $seq))
+	if [ "$result" -le 2 ]; then
+	    hit=$(($hit | $result))
+	else
+	    echo -n "Experienced error when testing for GFW type$seq: "
+	    case $result in
+		GUK_QUERY_FORMAT_ERROR)
+		echo "url too long."
+		;;
+		GUK_RESULT_SERVER_FAIL)
+		echo "server failure."
+		;;
+	    esac
+	fi
+	if [ $recv -eq 3 ]; then break; fi
+    done < <(echo -en "1 1 $URL\n2 2 $URL\n" | socat $SOCAT_OPT)
+    pkill -P $!
+    if [ $(($recv & 1)) -eq 0 ]; then
+	echo "Experienced error when testing for GFW type1: server did not response."
+    fi
+    if [ $(($recv & 2)) -eq 0 ]; then
+	echo "Experienced error when testing for GFW type2: server did not response."
+    fi
+
+    echo -n "$URL "
+    case $hit in
+	0)
+	echo "does not hit GFW."
+	;;
+	1)
+	echo "hit GFW type1."
+	;;
+	2)
+	echo "hit GFW type2."
+	;;
+	3)
+	echo "hit both GFW type1 and type2."
+	;;
+    esac
+    echo;
+done

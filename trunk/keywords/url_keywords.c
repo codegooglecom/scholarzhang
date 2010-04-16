@@ -48,10 +48,6 @@ void inthandler (int _) {
 	exit(-2);
 }
 
-void release_single_query(char *content, char result, void *arg) {
-	sem_post(arg);
-}
-
 void gk_add_context_blocking(char * const content, const int length, char *const result, const int type, gk_callback_f cb, void *arg) {
 	int ret;
 	long time;
@@ -120,33 +116,6 @@ void gk_cm_run() {
 	pthread_create(&gk_cm_bg, NULL, gk_cm_loop, &running);
 }
 
-char match_type(char *url, int len) {
-	char *content = malloc(len + HH_ADD_LEN);
-	char result1, result2;
-	if (content == NULL) {
-		perror("match_type");
-		return -1;
-	}
-
-	memcpy(content, "GET http://", HH_PRE_LEN);
-	memcpy(content + HH_PRE_LEN, url, len);
-	memcpy(content + HH_PRE_LEN + len, " HTTP/1.1\r\n\r\n", HH_PST_LEN);
-
-	sem_t sem;
-	sem_init(&sem, 0, 0);
-	gk_add_context_blocking(content, len + HH_ADD_LEN, &result2, HK_TYPE2, release_single_query, &sem);
-	sem_wait(&sem);
-
-	content[len + HH_ADD_LEN - 4] = '\n';
-	gk_add_context_blocking(content, len + HH_ADD_LEN - 2, &result1, HK_TYPE1, release_single_query, &sem);
-	sem_wait(&sem);
-
-	free(content);
-	sem_destroy(&sem);
-
-	return result1 | result2;
-}
-
 struct count_and_sem {
 	int c;
 	sem_t sem;
@@ -155,6 +124,36 @@ struct count_and_sem {
 void release_grouped_query(char *content, char result, void *arg) {
 	if (--(((struct count_and_sem *)arg)->c) == 0)
 		sem_post(&((struct count_and_sem *)arg)->sem);
+}
+
+char match_type(char *url, int len) {
+	char *content1 = malloc(len + HH_ADD_LEN - 2);
+	char *content2 = malloc(len + HH_ADD_LEN);
+	char result1, result2;
+	struct count_and_sem a;
+	if (content1 == NULL || content2 == NULL) {
+		perror("match_type");
+		return -1;
+	}
+
+	a.c = 2;
+	sem_init(&a.sem, 0, 0);
+
+	memcpy(content1, "GET http://", HH_PRE_LEN);
+	memcpy(content1 + HH_PRE_LEN, url, len);
+	memcpy(content1 + HH_PRE_LEN + len, " HTTP/1.1\n\n", HH_PST_LEN - 2);
+	gk_add_context_blocking(content1, len + HH_ADD_LEN - 2, &result1, HK_TYPE1, release_grouped_query, &a);
+	memcpy(content2, "GET http://", HH_PRE_LEN);
+	memcpy(content2 + HH_PRE_LEN, url, len);
+	memcpy(content2 + HH_PRE_LEN + len, " HTTP/1.1\r\n\r\n", HH_PST_LEN);
+	gk_add_context_blocking(content2, len + HH_ADD_LEN, &result2, HK_TYPE2, release_grouped_query, &a);
+
+	sem_wait(&a.sem);
+	sem_destroy(&a.sem);
+
+	free(content1); free(content2);
+
+	return result1 | result2;
 }
 
 void find_single(char *url, int len) {
@@ -296,22 +295,22 @@ int main(int argc, char *argv[]) {
 			break;
 		case 'h':
 		default:
-			printf("USAGE: \n"
+			printf("USAGE:\n"
 			       "# %s [OPTIONS]\n"
-			       "  -i <device>	   : network interface used for sending and receiving.\n"
+			       "  -i <device>      : network interface used for sending and receiving.\n"
 			       "  -f <config_file> : configuration file name.\n"
-			       "  -s <ip addr>	   : the source ip address of the current machine.\n", argv[0]);
+			       "  -s <ip addr>     : the source ip address of the current machine.\n", argv[0]);
 			return 0;
 		}
 	}
 
 	fprintf(stderr,
 		"[COMMAND SYNTAX]\n"
-		"LINE	  = [MODE \" \"] URL | MODE | \" \" GK_OPTS\n"
-		"MODE	  = \"s\" | \"ms\" | \"m\"\n"
-		"	   # s means single keyword\n"
-		"	   # ms means multiple simple keywords\n"
-		"	   # m means mutliple keywords\n%s\n", GK_OPT_SYNTAX);
+		"LINE     = [MODE \" \"] URL | MODE | \" \" GK_OPTS\n"
+		"MODE     = \"s\" | \"ms\" | \"m\"\n"
+		"          # s means single keyword\n"
+		"          # ms means multiple simple keywords\n"
+		"          # m means mutliple keywords\n%s\n", GK_OPT_SYNTAX);
 
 
 	if (signal(SIGINT, inthandler) == SIG_ERR) {
