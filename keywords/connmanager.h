@@ -4,6 +4,7 @@
 #include "dstmaintain.h"
 
 #define DEFAULT_CONN 10000
+#define RESULT_ERROR 0x04
 typedef void (*gk_callback_f)(char *content, char result, void *arg);
 
 int gk_add_context(char * const content, const int length, char *const result, const int type, gk_callback_f cb, void *arg);

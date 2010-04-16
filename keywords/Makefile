@@ -3,7 +3,10 @@ INCLUDES = -I.
 LIBS = -L. `pcap-config --libs` `libnet-config --libs` -lgfwkeyword
 CFLAGS = -Wall -Wextra -g
 
-all: url_keywords
+all: url_keywords guk_server
+
+guk_server: guk_server.c guk_common.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIBS)
 
 url_keywords: url_keywords.c libgfwkeyword.a gfwkeyword.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIBS) -lpthread
@@ -32,4 +35,4 @@ fingerprint.h: fingerprint.loose.h
 	ln -s $< $@
 
 clean:
-	rm -f *.o libgfwkeyword.a url_keywords
+	rm -f *.o libgfwkeyword.a url_keywords guk_server
