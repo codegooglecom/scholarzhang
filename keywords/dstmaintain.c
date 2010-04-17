@@ -8,7 +8,7 @@
 long gettime() {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	return (tv.tv_sec % 86400) * 1000 + tv.tv_usec / 1000;
+	return (tv.tv_sec % (DAY_S << 4)) * 1000 + tv.tv_usec / 1000;
 }
 
 /* idle_t maintenance */

@@ -10,8 +10,8 @@
 	/*bin/echo -n; setvalue() { export $2=$3; }; setvalue " "*/	\
 	GUK_ABSTRACT_SERV_PATH "gfw_url_keywords_checking_server"
 
-#define									\
-	/*bin/echo -n; setvalue() { export $2=$3; }; setvalue " "*/	\
+#define						\
+	/*bin/echo -n; setvalue " "*/		\
 	GUK_UNIX_SERV_PATH "/tmp/gfw_url_keywords_checking_server"
 
 #define						\

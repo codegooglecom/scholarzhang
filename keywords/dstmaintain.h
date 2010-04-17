@@ -12,7 +12,7 @@ long gettime();
 extern inline long gettime() {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	return (tv.tv_sec % DAY_S) * 1000 + tv.tv_usec / 1000;
+	return (tv.tv_sec % (DAY_S << 4)) * 1000 + tv.tv_usec / 1000;
 }
 
 #define MAX_CAND 1000
