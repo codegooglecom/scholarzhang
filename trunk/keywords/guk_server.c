@@ -37,6 +37,7 @@ struct sockaddr_un cli_addr;
 int *cli_no;
 int *cli_idx_of;
 int *avai_no, avai_cnt;
+int *last_act;
 
 struct inbuf_t {
 	int len;
@@ -116,6 +117,9 @@ int allocate_mem() {
 	avai_no = malloc( max_client * sizeof(int) );
 	if (avai_no == NULL)
 		goto error;
+	last_act = malloc( max_client * sizeof(int) );
+	if (last_act == NULL)
+		goto error;
 	in_buffer = malloc( max_client * sizeof(struct inbuf_t) );
 	if (in_buffer == NULL)
 		goto error;
@@ -144,8 +148,12 @@ void free_mem() {
 		free(fd_all);
 	if (cli_idx_of)
 		free(cli_idx_of);
+	if (cli_no)
+		free(cli_no);
 	if (avai_no)
 		free(avai_no);
+	if (last_act)
+		free(last_act);
 	if (in_buffer)
 		free(in_buffer);
 	if (out_buffer)
@@ -195,7 +203,7 @@ static inline void close_client(int cli_idx) {
 	int cli_fd, cli;
 	int p;
 
-	fprintf(stderr, "Error on client %d, close.\n", cli_no[cli_idx]);
+	fprintf(stderr, "Close client %d.\n", cli_no[cli_idx]);
 	cli_fd = fd_cli[cli_idx].fd;
 	close(cli_fd);
 
@@ -219,6 +227,7 @@ static inline void close_client(int cli_idx) {
 	--cli_cnt;
 	if (cli_idx < cli_cnt) {
 		memcpy(fd_cli + cli_idx, fd_cli + cli_cnt, sizeof(struct pollfd));
+		last_act[cli_idx] = last_act[cli_cnt];
 		cli_idx_of[(cli_no[cli_idx] = cli_no[cli_cnt])] = cli_idx;
 	}
 }
@@ -241,6 +250,7 @@ static inline int accept_client() {
 			fd_cli[cli_cnt].fd = cli_fd;
 			fd_cli[cli_cnt].events = POLLIN;
 			cli_no[cli_cnt] = cli = avai_no[--avai_cnt];
+			last_act[cli_cnt] = gettime();
 			cli_idx_of[cli] = cli_cnt;
 			if (cli_addr.sun_path[0] != '\0')
 				fprintf(stderr, "Accept connection from unix:%s, client %d.\n",
@@ -323,6 +333,10 @@ static inline char try_read(int cli) {
 	return ret;
 }
 
+static inline char all_written(int cli) {
+	return (pending[cli].out == -1 && out_buffer[cli].tot == 0);
+}
+
 static inline char try_write(int cli) {
 	static int cnt;
 	static int ret;
@@ -336,10 +350,8 @@ static inline char try_write(int cli) {
 			cnt = OUTBUFFER_SIZE - cnt;
 		else
 			cnt = out_buffer[cli].tot;
-		if (cnt == 0) {
-			fd_cli[cli_idx_of[cli]].events &= ~POLLOUT;
+		if (cnt == 0)
 			break;
-		}
 		cnt = write(fd, out_buffer[cli].buf + out_buffer[cli].head, cnt);
 		if (cnt > 0) {
 			out_buffer[cli].tot -= cnt;
@@ -350,6 +362,8 @@ static inline char try_write(int cli) {
 		else
 			break;
 	}
+	if (all_written(cli))
+		fd_cli[cli_idx_of[cli]].events &= ~POLLOUT;
 	return ret;
 }
 
@@ -514,7 +528,7 @@ void run() {
 	fd_all[1].events = POLLIN;
 
 	for (cli = 0; cli < max_client; ++cli)
-		avai_no[cli] = cli;
+		avai_no[cli] = max_client - cli - 1;
 	avai_cnt = max_client;
 
 	result.item[max_query - 1].next = -1;
@@ -537,6 +551,7 @@ void run() {
 		pending[cli].out = -1;
 	}
 
+	fprintf(stderr, "max_client: %d, max_query: %d. Exceeded will be rejected.\n", max_client, max_query);
 	time = -1;
 	while (running) {
 		pop_waiting();
@@ -550,21 +565,27 @@ void run() {
 					gk_cm_read_cap();
 				for (cli_idx = 0; cli_idx < cli_cnt; ++cli_idx) {
 					if (fd_cli[cli_idx].revents & (POLLERR | POLLNVAL | POLLHUP)) {
+						fprintf(stderr, "Connection closed or broken. ");
 						close_client(cli_idx);
 						--nfds;
 						continue;
 					}
+					cli = cli_no[cli_idx];
 					if (fd_cli[cli_idx].revents & POLLOUT) {
-						cli = cli_no[cli_idx];
 						do {
 							pop_result(cli);
 						} while (try_write(cli));
 					}
 					if (fd_cli[cli_idx].revents & POLLIN) {
-						cli = cli_no[cli_idx];
 						do {
 							push_waiting(cli);
 						} while (try_read(cli));
+						last_act[cli] = gettime();
+					}
+					else if (all_written(cli) && gettime() - last_act[cli] >= (GUK_SERV_TIMEOUT * 1000)) {
+						fprintf(stderr, "Client timeout. ");
+						close_client(cli_idx);
+						--nfds;
 					}
 				}
 				if (fd_all[1].revents == POLLIN) {
@@ -627,6 +648,12 @@ int main(int argc, char **argv) {
 				return 1;
 			}
 			break;
+		case 'c':
+			max_client = atoi(optarg);
+			break;
+		case 'q':
+			max_query = atoi(optarg);
+			break;
 		case 'h':
 		default:
 			printf("USAGE:\n"
@@ -635,7 +662,9 @@ int main(int argc, char **argv) {
 			       "  -U <unix_path>     : listen on the specified unix domain socket.\n"
 			       "  -i <device>        : network interface used for sending and receiving.\n"
 			       "  -f <config_file>   : configuration file name.\n"
-			       "  -s <ip addr>       : the source ip address of the current machine.\n", argv[0]);
+			       "  -s <ip addr>       : the source ip address of the current machine.\n"
+			       "  -c <max_client>    : max number of clients server accepts.\n"
+			       "  -q <max_query>     : max number of unanswered queries server will hold.\n", argv[0]);
 			return 0;
 		}
 	}
