@@ -206,6 +206,7 @@ static inline void close_client(int cli_idx) {
 	fprintf(stderr, "Close client %d.\n", cli_no[cli_idx]);
 	cli_fd = fd_cli[cli_idx].fd;
 	close(cli_fd);
+	fd_cli[cli_idx].fd = -1;
 
 	cli = cli_no[cli_idx];
 	in_buffer[cli].len = 0;
@@ -223,13 +224,6 @@ static inline void close_client(int cli_idx) {
 		delete_result(p);
 	}
 	avai_no[avai_cnt++] = cli;
-
-	--cli_cnt;
-	if (cli_idx < cli_cnt) {
-		memcpy(fd_cli + cli_idx, fd_cli + cli_cnt, sizeof(struct pollfd));
-		last_act[cli_idx] = last_act[cli_cnt];
-		cli_idx_of[(cli_no[cli_idx] = cli_no[cli_cnt])] = cli_idx;
-	}
 }
 
 static inline int accept_client() {
@@ -258,6 +252,7 @@ static inline int accept_client() {
 			else
 				fprintf(stderr, "Accept connection from abstract:%s, client %d.\n",
 					cli_addr.sun_path + 1, cli_no[cli_cnt]);
+			++cli_cnt;
 
 			/* this was done at the beginning and at
 			 * client close_client()ing. */
@@ -268,7 +263,6 @@ static inline int accept_client() {
 			//pending[cli].in = -1;
 			//pending[cli].out = -1;
 
-			++cli_cnt;
 			return 0;
 		}
 	}
@@ -376,7 +370,7 @@ void push_result(char *content, char rslt, void *arg) {
 
 	fprintf(stderr, "query type%d ", w->type);
 	fputcs(stderr, content + HH_PRE_LEN, w->len - HH_ADD_LEN + ((w->type == 1)?2:0));
-	fprintf(stderr, " result %d asked by client %d with seq %d\n", rslt & w->type, cli, w->seq);
+	fprintf(stderr, " result %d asked by client %d with seq %d\n", rslt & ~HK_TO_ST_TYPE(w->type), cli, w->seq);
 
 	free(content);
 	if (cli < 0)
@@ -385,7 +379,7 @@ void push_result(char *content, char rslt, void *arg) {
 	res_idx = result.avai;
 	result.avai = result.item[res_idx].next;
 
-	result.item[res_idx].result = rslt & w->type;
+	result.item[res_idx].result = rslt & ~HK_TO_ST_TYPE(w->type);
 	result.item[res_idx].seq = w->seq;
 	result.item[res_idx].next = -1;
 
@@ -563,6 +557,10 @@ void run() {
 			if ((ret = poll(fd_all, nfds, delta + 1)) > 0) {
 				if (fd_all[0].revents == POLLIN)
 					gk_cm_read_cap();
+
+				ret = (fd_all[1].revents == POLLIN); // ret here stand for new connection available
+
+				nfds -= 2;
 				for (cli_idx = 0; cli_idx < cli_cnt; ++cli_idx) {
 					if (fd_cli[cli_idx].revents & (POLLERR | POLLNVAL | POLLHUP)) {
 						fprintf(stderr, "Connection closed or broken. ");
@@ -582,16 +580,25 @@ void run() {
 						} while (try_read(cli));
 						last_act[cli] = gettime();
 					}
-					else if (all_written(cli) && gettime() - last_act[cli] >= (GUK_SERV_TIMEOUT * 1000)) {
+					else if (ret && all_written(cli) && gettime() - last_act[cli] >= (GUK_SERV_TIMEOUT * 1000)) {
 						fprintf(stderr, "Client timeout. ");
 						close_client(cli_idx);
 						--nfds;
 					}
 				}
-				if (fd_all[1].revents == POLLIN) {
-					if (cli_cnt < max_client && accept_client() == 0)
-						++nfds;
+				/* remove closed clients */
+				for (cli_idx = 0; cli_cnt > (int)nfds; ) {
+					while (fd_cli[cli_idx].fd >= 0)
+						++cli_idx;
+					while (fd_cli[--cli_cnt].fd < 0);
+					memcpy(fd_cli + cli_idx, fd_cli + cli_cnt, sizeof(struct pollfd));
+					last_act[cli_idx] = last_act[cli_cnt];
+					cli_idx_of[(cli_no[cli_idx] = cli_no[cli_cnt])] = cli_idx;
 				}
+				nfds += 2;
+				if (ret)
+					while (cli_cnt < max_client && accept_client() == 0)
+						++nfds;
 			}
 			else if (ret < 0)
 				perror("poll");
@@ -606,6 +613,14 @@ void run() {
 	}
 
 	gk_cm_finalize();
+	for (cli_idx = 0; cli_idx < cli_cnt; ++cli_idx) {
+		cli = cli_no[cli_idx];
+		do {
+			pop_result(cli);
+		} while (try_write(cli));
+	}
+	for (cli_idx = 0; cli_idx < cli_cnt; ++cli_idx)
+		close_client(cli_idx);
 	free_mem();
 }
 

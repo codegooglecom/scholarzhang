@@ -25,10 +25,10 @@ test_url() {
 	else
 	    echo -n "Experienced error when testing for GFW type$seq: "
 	    case $result in
-		GUK_QUERY_FORMAT_ERROR)
+		"$GUK_QUERY_FORMAT_ERROR")
 		echo "url too long."
 		;;
-		GUK_RESULT_SERVER_FAIL)
+		"$GUK_RESULT_SERVER_FAIL")
 		echo "server failure."
 		;;
 	    esac
