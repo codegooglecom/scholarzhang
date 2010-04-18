@@ -244,7 +244,7 @@ static inline int accept_client() {
 			fd_cli[cli_cnt].fd = cli_fd;
 			fd_cli[cli_cnt].events = POLLIN;
 			cli_no[cli_cnt] = cli = avai_no[--avai_cnt];
-			last_act[cli_cnt] = gettime();
+			last_act[cli] = gettime();
 			cli_idx_of[cli] = cli_cnt;
 			if (cli_addr.sun_path[0] != '\0')
 				fprintf(stderr, "Accept connection from unix:%s, client %d.\n",
@@ -592,7 +592,6 @@ void run() {
 						++cli_idx;
 					while (fd_cli[--cli_cnt].fd < 0);
 					memcpy(fd_cli + cli_idx, fd_cli + cli_cnt, sizeof(struct pollfd));
-					last_act[cli_idx] = last_act[cli_cnt];
 					cli_idx_of[(cli_no[cli_idx] = cli_no[cli_cnt])] = cli_idx;
 				}
 				nfds += 2;
