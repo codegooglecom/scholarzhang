@@ -34,7 +34,7 @@ test_url() {
 	    esac
 	fi
 	if [ $recv -eq 3 ]; then break; fi
-    done < <(echo -en "1 1 $1\n2 2 $1\n" | socat $SOCAT_OPT)
+    done < <(echo -en "1 1 $1\n2 2 $1\n" | socat -t 20 "$SOCK_ADDR" -)
     pkill -P $!
     if [ $(($recv & 1)) -eq 0 ]; then
 	echo "Experienced error when testing for GFW type1: server did not response."
@@ -64,8 +64,8 @@ ABSTRACT=$GUK_ABSTRACT_SERV_PATH
 UNIX=
 
 while getopts "a:U:" OPTION; do
-    case $OPTION in
-	h)
+    case "$OPTION" in
+	h|?)
 	    usage
 	    exit 1
 	    ;;
@@ -81,17 +81,13 @@ while getopts "a:U:" OPTION; do
 	    fi
 	    ABSTRACT=
 	    ;;
-	?)
-	    usage
-	    exit 1
-	    ;;
     esac
 done
 
 if [ -z $ABSTRACT ]; then
-    SOCAT_OPT="-t 20 unix-connect:$UNIX -"
+    SOCK_ADDR="unix-connect:$UNIX"
 else
-    SOCAT_OPT="-t 20 abstract-connect:$ABSTRACT -"
+    SOCK_ADDR="abstract-connect:$ABSTRACT"
 fi
 
 if [ "x$*" != x ]; then

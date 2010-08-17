@@ -41,6 +41,7 @@ int *last_act;
 
 struct inbuf_t {
 	int len;
+	char *newline;
 	char buf[GUK_MAX_QUERY_LEN];
 } *in_buffer;
 
@@ -50,7 +51,7 @@ struct outbuf_t {
 	char buf[OUTBUFFER_SIZE];
 } *out_buffer;
 
-#define DEFAULT_QUERY 2000;
+#define DEFAULT_QUERY 2;
 int max_query = DEFAULT_QUERY;
 
 struct wait_item {
@@ -210,6 +211,7 @@ static inline void close_client(int cli_idx) {
 
 	cli = cli_no[cli_idx];
 	in_buffer[cli].len = 0;
+	in_buffer[cli].newline = in_buffer[cli].buf;
 	out_buffer[cli].head = 0;
 	out_buffer[cli].tail = 0;
 	out_buffer[cli].tot = 0;
@@ -257,6 +259,7 @@ static inline int accept_client() {
 			/* this was done at the beginning and at
 			 * client close_client()ing. */
 			//in_buffer[cli].len = 0;
+			//in_buffer[cli].newline = in_buffer[cli].buf;
 			//out_buffer[cli].head = 0;
 			//out_buffer[cli].tail = 0;
 			//out_buffer[cli].tot = 0;
@@ -277,11 +280,11 @@ static inline void fputcs(FILE *stream, char *s, int count) {
 }
 
 static inline void pop_result(int cli) {
-	static int res_idx;
+	static int res_idx, next_res_idx;
 	static int cnt, spc;
 	static char rslt[GUK_RESULT_ITEM_SIZE + 1];
 
-	for (res_idx = pending[cli].out; res_idx >= 0; res_idx = result.item[res_idx].next) {
+	for (res_idx = pending[cli].out; res_idx >= 0; res_idx = next_res_idx) {
 		cnt = sprintf(rslt, "%d %d\n", result.item[res_idx].seq, result.item[res_idx].result);
 		if (out_buffer[cli].tot + cnt <= OUTBUFFER_SIZE) {
 			spc = (OUTBUFFER_SIZE - out_buffer[cli].tail);
@@ -295,6 +298,9 @@ static inline void pop_result(int cli) {
 			else
 				out_buffer[cli].tail += cnt;
 			out_buffer[cli].tot += cnt;
+
+			next_res_idx = result.item[res_idx].next;
+			delete_result(res_idx);
 		}
 		else
 			break;
@@ -314,10 +320,11 @@ static inline char try_read(int cli) {
 		cnt = read(fd, in_buffer[cli].buf + in_buffer[cli].len, cnt);
 		if (cnt > 0) {
 			if ((in_buffer[cli].len += cnt) == GUK_MAX_QUERY_LEN)
-				if (NULL == memchr(in_buffer[cli].buf, '\n', GUK_MAX_QUERY_LEN)) {
+				if (NULL == memchr(in_buffer[cli].newline, '\n', GUK_MAX_QUERY_LEN + in_buffer[cli].buf - in_buffer[cli].newline)) {
 					// wrong format or too long, ignore it!
 					in_buffer[cli].buf[0] = 'F';
 					in_buffer[cli].len = 1;
+					in_buffer[cli].newline = in_buffer[cli].buf + 1;
 				}
 			ret = 1;
 		}
@@ -325,6 +332,10 @@ static inline char try_read(int cli) {
 			break;
 	}
 	return ret;
+}
+
+static inline char is_idle(int cli) {
+	return (pending[cli].out == -1 && pending[cli].in == -1);
 }
 
 static inline char all_written(int cli) {
@@ -356,13 +367,11 @@ static inline char try_write(int cli) {
 		else
 			break;
 	}
-	if (all_written(cli))
-		fd_cli[cli_idx_of[cli]].events &= ~POLLOUT;
 	return ret;
 }
 
 void push_result(char *content, char rslt, void *arg) {
-	static int cli, res_idx, wait_idx;
+	static int cli, res_idx;
 	static struct wait_item *w;
 
 	w = arg;
@@ -377,6 +386,8 @@ void push_result(char *content, char rslt, void *arg) {
 		return;
 
 	res_idx = result.avai;
+	if (res_idx < 0)
+		fputs("push_result: no space to hold this result, this is a BUG!\n", stderr);
 	result.avai = result.item[res_idx].next;
 
 	result.item[res_idx].result = rslt & ~HK_TO_ST_TYPE(w->type);
@@ -390,7 +401,7 @@ void push_result(char *content, char rslt, void *arg) {
 	pending[cli].out_tail = res_idx;
 
 	w->next = waiting.avai;
-	waiting.avai = wait_idx = w - waiting.item;
+	waiting.avai = w - waiting.item;
 
 	if (w->cli_prev < 0)
 		pending[cli].in = w->cli_next;
@@ -423,13 +434,21 @@ static inline void push_waiting(int cli) {
 	static int wait_idx;
 
 	while (1) {
-		eos = (char *)memchr(in_buffer[cli].buf, '\n', in_buffer[cli].len);
-		if (eos == NULL)
+		eos = (char *)memchr(in_buffer[cli].newline, '\n', in_buffer[cli].len + in_buffer[cli].buf - in_buffer[cli].newline);
+		if (eos == NULL) {
+			in_buffer[cli].newline = in_buffer[cli].buf + in_buffer[cli].len;
 			return;
-		*eos = '\0';
+		}
+		in_buffer[cli].newline = eos;
 
 		wait_idx = waiting.avai;
+		if (wait_idx == -1) {
+			fputs("push_waiting: waiting list full\n", stderr);
+			return;
+		}
 		waiting.avai = waiting.item[wait_idx].next;
+
+		*eos = '\0';
 
 		waiting.item[wait_idx].cli = cli;
 		errno = 0;
@@ -462,7 +481,7 @@ static inline void push_waiting(int cli) {
 			memcpy(eos, " HTTP/1.1\n\n", HH_PST_LEN - 2);
 			waiting.item[wait_idx].len = len + HH_ADD_LEN - 2;
 		}
-		else {
+		else if (waiting.item[wait_idx].type == HK_TYPE2) {
 			if ((waiting.item[wait_idx].url = malloc(len + HH_ADD_LEN)) == NULL)
 				goto error;
 			eos = waiting.item[wait_idx].url;
@@ -473,9 +492,12 @@ static inline void push_waiting(int cli) {
 			memcpy(eos, " HTTP/1.1\r\n\r\n", HH_PST_LEN);
 			waiting.item[wait_idx].len = len + HH_ADD_LEN;
 		}
+		else
+			goto error;
 
 		pos += len + 1;
 		in_buffer[cli].len = in_buffer[cli].len - (pos - in_buffer[cli].buf);
+		in_buffer[cli].newline = in_buffer[cli].buf;
 		memmove(in_buffer[cli].buf, pos, in_buffer[cli].len);
 
 		/* it's a waiting for test url now */
@@ -492,6 +514,11 @@ static inline void push_waiting(int cli) {
 		continue;
 
 	ignore:
+		pos = eos + 1;
+		in_buffer[cli].len = in_buffer[cli].len - (pos - in_buffer[cli].buf);
+		in_buffer[cli].newline = in_buffer[cli].buf;
+		memmove(in_buffer[cli].buf, pos, in_buffer[cli].len);
+
 		waiting.item[wait_idx].next = waiting.avai;
 		waiting.avai = wait_idx;
 		continue;
@@ -538,6 +565,7 @@ void run() {
 
 	for (cli = 0; cli < max_client; ++cli) {
 		in_buffer[cli].len = 0;
+		in_buffer[cli].newline = in_buffer[cli].buf;
 		out_buffer[cli].head = 0;
 		out_buffer[cli].tail = 0;
 		out_buffer[cli].tot = 0;
@@ -554,6 +582,12 @@ void run() {
 		else
 			delta = time - gettime();
 		while (delta >= 0) {
+			for (cli_idx = 0; cli_idx < cli_cnt; ++cli_idx) {
+				cli = cli_no[cli_idx];
+				push_waiting(cli);
+				if ((fd_cli[cli_idx].events & POLLIN) == 0 && in_buffer[cli].len != GUK_MAX_QUERY_LEN)
+					fd_cli[cli_idx].events |= POLLIN;
+			}
 			if ((ret = poll(fd_all, nfds, delta + 1)) > 0) {
 				if (fd_all[0].revents == POLLIN)
 					gk_cm_read_cap();
@@ -563,7 +597,7 @@ void run() {
 				nfds -= 2;
 				for (cli_idx = 0; cli_idx < cli_cnt; ++cli_idx) {
 					if (fd_cli[cli_idx].revents & (POLLERR | POLLNVAL | POLLHUP)) {
-						fprintf(stderr, "Connection closed or broken. ");
+						fprintf(stderr, "Connection closed or broken.");
 						close_client(cli_idx);
 						--nfds;
 						continue;
@@ -573,14 +607,19 @@ void run() {
 						do {
 							pop_result(cli);
 						} while (try_write(cli));
-					}
-					if (fd_cli[cli_idx].revents & POLLIN) {
-						do {
-							push_waiting(cli);
-						} while (try_read(cli));
+						if (all_written(cli))
+							fd_cli[cli_idx_of[cli]].events &= ~POLLOUT;
 						last_act[cli] = gettime();
 					}
-					else if (ret && all_written(cli) && gettime() - last_act[cli] >= (GUK_SERV_TIMEOUT * 1000)) {
+					if (fd_cli[cli_idx].revents & POLLIN) {
+						while (try_read(cli)) {
+							push_waiting(cli);
+						}
+						if (in_buffer[cli].len == GUK_MAX_QUERY_LEN)
+							fd_cli[cli_idx].events &= ~POLLIN;
+						last_act[cli] = gettime();
+					}
+					else if (ret && is_idle(cli) && gettime() - last_act[cli] >= (GUK_SERV_TIMEOUT * 1000)) {
 						fprintf(stderr, "Client timeout. ");
 						close_client(cli_idx);
 						--nfds;
@@ -588,11 +627,17 @@ void run() {
 				}
 				/* remove closed clients */
 				for (cli_idx = 0; cli_cnt > (int)nfds; ) {
-					while (fd_cli[cli_idx].fd >= 0)
+					while (cli_idx < (int)nfds && fd_cli[cli_idx].fd >= 0)
 						++cli_idx;
-					while (fd_cli[--cli_cnt].fd < 0);
-					memcpy(fd_cli + cli_idx, fd_cli + cli_cnt, sizeof(struct pollfd));
-					cli_idx_of[(cli_no[cli_idx] = cli_no[cli_cnt])] = cli_idx;
+					if (cli_idx == (int)nfds) {
+						cli_cnt = cli_idx;
+						break;
+					}
+					else {
+						while (fd_cli[--cli_cnt].fd < 0);
+						memcpy(fd_cli + cli_idx, fd_cli + cli_cnt, sizeof(struct pollfd));
+						cli_idx_of[(cli_no[cli_idx] = cli_no[cli_cnt])] = cli_idx;
+					}
 				}
 				nfds += 2;
 				if (ret)
