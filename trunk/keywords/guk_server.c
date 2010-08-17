@@ -51,7 +51,7 @@ struct outbuf_t {
 	char buf[OUTBUFFER_SIZE];
 } *out_buffer;
 
-#define DEFAULT_QUERY 2;
+#define DEFAULT_QUERY 2000;
 int max_query = DEFAULT_QUERY;
 
 struct wait_item {
