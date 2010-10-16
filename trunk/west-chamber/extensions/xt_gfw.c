@@ -101,6 +101,7 @@ gfw_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 			|| addr == htonl(0x4e10310f)
 			|| addr == htonl(0x2e52ae44)
 			|| addr == htonl(0xf3b9bb27)
+			|| addr == htonl(0xf3b9bb1e) /* Addr: 243.185.187.30 */
 			|| addr == htonl(0x9f6a794b)
 			|| addr == htonl(0x253d369e)
 			|| addr == htonl(0x9f1803ad) /* Addr: 159.24.3.173 */
