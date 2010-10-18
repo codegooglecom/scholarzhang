@@ -1,17 +1,17 @@
 
-  using ipset
+  Using ipset
 ------------------------------------------------------------------------------
-note that the ipset you are using should be >= 4.2 which fixes some bug
-in hash table resizing. old version with this bug may cause kernel oops if fed
+Note that the ipset you are using should be >= 4.2 which fixes some bug
+in hash table resizing. Older version with this bug may cause kernel oops if fed
 with certain parameters.
 
-features from ipset are used by this package. you may read the ipset(8) manpage
+Features from ipset are used by this package. You may read the ipset(8) manpage
 first, and set up your custom sets for target confining.
 
-sample scripts are provided in the `examples' directory including:
+Sample scripts are provided in the `examples' directory including:
 GOOGLE, YOUTUBE, CHINA and the NOCLIP set. you may write your own ip set.
 
-examples of restoring ipsets from saved scripts using `ipset -R`:
+Examples of restoring ipsets from saved scripts using `ipset -R`:
 
 # ipset -R
 -N YOUTUBE nethash --hashsize 50 --probes 1
@@ -24,10 +24,10 @@ COMMIT
 ^D
 
 --probes 1 is the fastest, --probes 4 will be slow. you can adjust your 
-settings to your satisfaction. see syslog if --hashsize is so small and cause 
+settings to your satisfaction. See syslog if --hashsize is so small and cause 
 too many times of resizing.
 
-then finally set the NOCLIP set to pack your sets into one set:
+Finally set the NOCLIP set to pack your sets into one set:
 
 # ipset -R
 -N NOCLIP setlist --size 4
@@ -36,7 +36,7 @@ then finally set the NOCLIP set to pack your sets into one set:
 COMMIT
 ^D
 
-  using iptables
+  Using iptables
 ------------------------------------------------------------------------------
 1. ZHANG - client-side connection obfuscation
 
@@ -48,13 +48,13 @@ COMMIT
 -j ZHANG \
 -m comment --comment "client-side connection obfuscation"
 
-this means incoming SYN/ACK from the ip address in the NOCLIP set and from 
+This means incoming SYN/ACK from the ip address in the NOCLIP set and from 
 port 80 will be replied with special packets to make connection obfuscated 
 against the GFW.
 
-this will make your free from keyword reset filtering when visiting a normal
-server. but certain rfc non-compliant hosts and firewalls will reset the 
-connection if received such replies sent by ZHANG. this is why we need ipset 
+That will make your free from keyword reset filtering when visiting a normal
+server. But certain rfc non-compliant hosts and firewalls will reset the 
+connection if received such replies sent by ZHANG. This is why we need ipset 
 to limit the ip range that will be dealt with by ZHANG to the minimum of what 
 we really need.
 
@@ -70,9 +70,9 @@ we really need.
 
 CHINA set can be set using `ipset -R < CHINA`
 
-warning: ZHANG and CUI are terminating target, they will ACCEPT packets sent 
+Warning: ZHANG and CUI are terminating target, they will ACCEPT packets sent 
 to them, so any rules after them have no effect.
-they should be put to the last place if other filtering need to be done.
+They should be put to the last place if other filtering need to be done.
 
 3. log gfw tcp resets in syslog
 
@@ -84,7 +84,7 @@ they should be put to the last place if other filtering need to be done.
 -j LOG --log-level info --log-prefix "gfw: " \
 -m comment --comment "log gfw tcp resets"
 
-when you see `connection reset' notice in browser, you may see what happened
+When you see `connection reset' notice in browser, you may see what happened
 on the transport layer in the tail of syslog.
 
 4. drop gfw dns hijacking packets
@@ -97,26 +97,26 @@ on the transport layer in the tail of syslog.
 -j DROP \
 -m comment --comment "drop gfw dns hijacks"
 
-you may update your resolv.conf by:
+You may update your resolv.conf by:
 1. modify dhclient.conf, find the `prepend domain-name-servers ...;' line and
    set your favorite overwall dns server.
 2. restart dhclient, just one method: ifconfig eth0 down; ifconfig eth0 up.
-3. host -tA twitter.com -- true result and no gfw poisoning anymore!
+3. host -ta twitter.com -- true result and no gfw poisoning anymore!
 
-  troubleshooting
+  Troubleshooting
 -----------------------------------------------------------------------------
-when you see connection resets in browser, go to syslog and check if any gfw
+When you see connection resets in browser, go to syslog and check if any gfw
 entries exist.
 
-you can also use tcpdump to save traffic dump. when problems happen, you can
+You can also use tcpdump to save traffic dump. When problems happen, you can
 use wireshark to open it and trace back for the reason.
 
   $ cd /dev/shm
   # tcpdump -Kpq -C2 -W10 -ieth0 -s0 -wcap port 80 &
 
-when problem happen, type `fg' to make the job foreground then ^C to stop it.
+When problem happen, type `fg' to make the job foreground then ^C to stop it.
 
-parameters of tcpdump explained:
+Parameters of tcpdump explained:
   -K: do not verify tcp checksums
   -p: no promiscuous
   -q: be quiet
@@ -127,4 +127,4 @@ parameters of tcpdump explained:
   -wcap: save dump file as "capXX"
   port 80: match traffic from/to port 80
 
-you can also have your own settings and dump saving location just as you wish.
+You can also have your own settings and dump saving location just as you wish.

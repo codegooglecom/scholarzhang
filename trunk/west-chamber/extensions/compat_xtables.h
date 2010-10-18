@@ -60,7 +60,7 @@
 #	define init_net__proc_net     init_net.proc_net
 #endif
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 27)
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 34)
 #	define xt_match              xtnu_match
 #	define xt_register_match     xtnu_register_match
 #	define xt_unregister_match   xtnu_unregister_match
@@ -76,6 +76,20 @@
 #	define csum_replace2 nf_csum_replace2
 #	define csum_replace4 nf_csum_replace4
 #	define inet_proto_csum_replace4 xtnu_proto_csum_replace4
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 34)
+#	define ipt_unregister_table(tbl) ipt_unregister_table(&init_net, (tbl))
+#	define ip6t_unregister_table(tbl) ip6t_unregister_table(&init_net, (tbl))
+#else
+#	define ipt_unregister_table(tbl) ipt_unregister_table(tbl)
+#	define ip6t_unregister_table(tbl) ip6t_unregister_table(tbl)
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36)
+#	define rt_dst(rt)	(&(rt)->dst)
+#else
+#	define rt_dst(rt)	(&(rt)->u.dst)
 #endif
 
 #if !defined(NIP6) && !defined(NIP6_FMT)

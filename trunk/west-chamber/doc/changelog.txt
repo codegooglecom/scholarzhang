@@ -1,10 +1,82 @@
 
 HEAD
 ====
+
+
+v1.30 (October 02 2010)
+=======================
+- update to ipset 4.4
+  * ipport{,ip,net}hash did not work with mixed "src" and "dst"
+    destination parameters
+- deactivate building xt_TEE and xt_CHECKSUM by default, as these have been
+  merged upstream in Linux 2.6.35 and 2.6.36, respectively.
+  Distros still wishing to build this need to enable it in their build
+  script, e.g. perl -i -pe 's{^build_TEE=.*}{build_TEE=m}' mconfig;
+
+
+v1.29 (September 29 2010)
+=========================
+- compat_xtables: return bool for match_check and target_check in 2.6.23..34
+- ipset: enable building of ip_set_ipport{ip,net}hash.ko
+- support for Linux 2.6.36
+- SYSRQ: resolve compile error with Linux 2.6.36
+- TEE: resolve compile error with Linux 2.6.36
+- add workaround for broken linux-glibc-devel 2.6.34 userspace headers
+  ("implicit declaration of function 'ALIGN'")
+
+
+Xtables-addons 1.28 (July 24 2010)
+==================================
+- RAWNAT: IPv6 variants erroneously rejected masks /33-/128
+- new target xt_CHECKSUM
+- xt_length2: add support for IPv6 jumbograms
+- xt_geoip: fix possible out-of-bounds access
+- import xt_geoip database scripts
+
+
+Xtables-addons 1.27 (May 16 2010)
+=================================
+- further updates for the upcoming 2.6.35 changes
+
+
+Xtables-addons 1.26 (April 30 2010)
+===================================
+- compat_xtables: fix 2.6.34 compile error due to a typo
+
+
+Xtables-addons 1.25 (April 26 2010)
+===================================
+- TEE: do rechecksumming in PREROUTING too
+- TEE: decrease TTL on cloned packet
+- TEE: set dont-fragment on cloned packets
+- TEE: free skb when route lookup failed
+- TEE: do not limit use to mangle table
+- TEE: do not retain iif and mark on cloned packet
+- TEE: new loop detection logic
+- TEE: use less expensive pskb_copy
+- condition: remove unnecessary RCU protection
+
+
+Xtables-addons 1.24 (March 17 2010)
+===================================
+- build: fix build of userspace modules against old (pre-2.6.25)
+  headers from linux-glibc-devel (/usr/include/linux)
+- ipp2p: updated bittorent command recognition
+- SYSRQ: let module load when crypto is unavailable
+- SYSRQ: allow processing of UDP-Lite
+
+
+Xtables-addons 1.23 (February 24 2010)
+======================================
+- build: support for Linux 2.6.34
+- build: remove unused --with-ksource option
+- build: remove unneeded --with-xtables option
+- build: fix compilations in RAWNAT, SYSRQ and length2 when CONFIG_IPV6=n
 - ipset: update to 4.2
+- ECHO: fix compilation w.r.t. skb_dst
 
 
-Xtables-addons 1.22 (January 22 2009)
+Xtables-addons 1.22 (January 22 2010)
 =====================================
 - compat_xtables: support for 2.6.33 skb_iif changes
 - geoip: for FHS compliance use /usr/share/xt_geoip instead of /var/geoip
