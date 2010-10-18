@@ -17,7 +17,7 @@
 #include "compat_xtables.h"
 
 static bool
-gfw_mt(const struct sk_buff *skb, const struct xt_match_param *par)
+gfw_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	const struct iphdr *iph;
 	struct tcphdr _tcph, *th;
@@ -38,7 +38,7 @@ gfw_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 		th = skb_header_pointer(skb, par->thoff,
 					sizeof(_tcph), &_tcph);
 		if (th == NULL || th->doff * 4 < sizeof(struct tcphdr)) {
-			*par->hotdrop = true;
+			par->hotdrop = true;
 			return false;
 		}
 
@@ -63,7 +63,7 @@ gfw_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 		uh = skb_header_pointer(skb, par->thoff,
 					sizeof(_udph), &_udph);
 		if (uh == NULL || ntohs(uh->len) < sizeof(struct udphdr)) {
-			*par->hotdrop = true;
+			par->hotdrop = true;
 			return false;
 		}
 
@@ -90,24 +90,13 @@ gfw_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 		name = *(__be16 *)(end - 16);
 
 		/* dns[1]: dns flags */
-		/*if ((iph->id == htons(0x7110) && dns[1] == htons(0x8180)
-			&& ttl == htonl(300) && name == htons(0xc00c))
-			|| (ntohl(ttl) >= 3600
-			&& (ntohl(ttl) < 46800 || ntohl(ttl) == 86400)
-			&& dns[1] == htons(0x8580) && name != htons(0xc00c))) {*/
-			if (addr == htonl(0x5d2e0859)
-			|| addr == htonl(0xcb620741)
-			|| addr == htonl(0x0807c62d)
-			|| addr == htonl(0x4e10310f)
-			|| addr == htonl(0x2e52ae44)
-			|| addr == htonl(0xf3b9bb27)
-			|| addr == htonl(0xf3b9bb1e) /* Addr: 243.185.187.30 */
-			|| addr == htonl(0x9f6a794b)
-			|| addr == htonl(0x253d369e)
-			|| addr == htonl(0x9f1803ad) /* Addr: 159.24.3.173 */
-			|| addr == htonl(0x3b1803ad))
-				return true;
-		/*}*/
+		if (addr == htonl(0x5d2e0859) || addr == htonl(0xcb620741) ||
+		    addr == htonl(0x0807c62d) || addr == htonl(0x4e10310f) ||
+		    addr == htonl(0x2e52ae44) || addr == htonl(0xf3b9bb27) ||
+		    addr == htonl(0xf3b9bb1e) || addr == htonl(0x9f6a794b) ||
+		    addr == htonl(0x253d369e) || addr == htonl(0x9f1803ad) ||
+		    addr == htonl(0x3b1803ad))
+			return true;
 	}
 
 	return false;

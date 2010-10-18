@@ -32,16 +32,6 @@ enum {
 	NFPROTO_NUMPROTO,
 };
 
-struct xt_match_param {
-	const struct net_device *in, *out;
-	const struct xt_match *match;
-	const void *matchinfo;
-	int fragoff;
-	unsigned int thoff;
-	bool *hotdrop;
-	u_int8_t family;
-};
-
 struct xt_mtchk_param {
 	const char *table;
 	const void *entryinfo;
@@ -81,33 +71,52 @@ struct xt_tgdtor_param {
 };
 #endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 34)
+struct xt_action_param {
+	union {
+		const struct xt_match *match;
+		const struct xt_target *target;
+	};
+	union {
+		const void *matchinfo, *targinfo;
+	};
+	const struct net_device *in, *out;
+	int fragoff;
+	unsigned int thoff, hooknum;
+	u_int8_t family;
+	bool hotdrop;
+};
+#endif
+
 struct xtnu_match {
-	struct list_head list;
-	char name[XT_FUNCTION_MAXNAMELEN - 1 - sizeof(void *)];
-	bool (*match)(const struct sk_buff *, const struct xt_match_param *);
-	bool (*checkentry)(const struct xt_mtchk_param *);
+	/*
+	 * Making it smaller by sizeof(void *) on purpose to catch
+	 * lossy translation, if any.
+	 */
+	char name[sizeof(((struct xt_match *)NULL)->name) - 1 - sizeof(void *)];
+	uint8_t revision;
+	bool (*match)(const struct sk_buff *, struct xt_action_param *);
+	int (*checkentry)(const struct xt_mtchk_param *);
 	void (*destroy)(const struct xt_mtdtor_param *);
 	struct module *me;
 	const char *table;
 	unsigned int matchsize, hooks;
 	unsigned short proto, family;
-	uint8_t revision;
 
 	void *__compat_match;
 };
 
 struct xtnu_target {
-	struct list_head list;
-	char name[XT_FUNCTION_MAXNAMELEN - 1 - sizeof(void *)];
+	char name[sizeof(((struct xt_target *)NULL)->name) - 1 - sizeof(void *)];
+	uint8_t revision;
 	unsigned int (*target)(struct sk_buff **,
-		const struct xt_target_param *);
-	bool (*checkentry)(const struct xt_tgchk_param *);
+		const struct xt_action_param *);
+	int (*checkentry)(const struct xt_tgchk_param *);
 	void (*destroy)(const struct xt_tgdtor_param *);
 	struct module *me;
 	const char *table;
 	unsigned int targetsize, hooks;
 	unsigned short proto, family;
-	uint8_t revision;
 
 	void *__compat_target;
 };
@@ -153,5 +162,7 @@ extern void xtnu_csum_replace4(__u16 __bitwise *, __be32, __be32);
 extern void xtnu_proto_csum_replace4(__u16 __bitwise *, struct sk_buff *,
 	__be32, __be32, bool);
 extern int xtnu_skb_linearize(struct sk_buff *);
+
+extern void *HX_memmem(const void *, size_t, const void *, size_t);
 
 #endif /* _COMPAT_XTNU_H */

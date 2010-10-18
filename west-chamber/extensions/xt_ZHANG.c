@@ -171,7 +171,7 @@ free_skb:
 }
 
 static unsigned int
-zhang_tg(struct sk_buff **pskb, const struct xt_target_param *par)
+zhang_tg(struct sk_buff **pskb, const struct xt_action_param *par)
 {
 	/* WARNING: This code causes reentry within iptables.
 	   This means that the iptables jump stack is now crap.  We

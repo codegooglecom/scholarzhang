@@ -4,8 +4,7 @@ Installation instructions for Xtables-addons
 Xtables-addons uses the well-known configure(autotools) infrastructure
 in combination with the kernel's Kbuild system.
 
-	$ ./autogen.sh
-	$ ./configure CFLAGS="..." --prefix=/usr ...
+	$ ./configure --with-xtlibdir=SEE_BELOW
 	$ make
 	# make install
 
@@ -52,20 +51,14 @@ Configuring and compiling
 	For RPM building, it should be /usr/src/linux-obj/...
 	or whatever location the distro makes use of.
 
---with-xtables=
-
-	Specifies the path to the directory where we may find
-	xtables.h, should it not be within the standard C compiler
-	include path (/usr/include), or if you want to override it.
-	The directory will be checked for xtables.h and
-	include/xtables.h. (The latter to support both standard
-	/usr/include and the iptables source root.)
-
 --with-xtlibdir=
 
 	Specifies the path to where the newly built extensions should
 	be installed when `make install` is run. It uses the same
-	default as the Xtables/iptables package, ${libexecdir}/xtables.
+	default as the Xtables/iptables package, ${libexecdir}/xtables,
+	but you may need to specify this nevertheless, as autotools
+	defaults to using /usr/local as prefix, and distributions put
+	the files in differing locations.
 
 If you want to enable debugging, use
 
@@ -73,6 +66,25 @@ If you want to enable debugging, use
 
 (-O0 is used to turn off instruction reordering, which makes debugging
 much easier.)
+
+To make use of a libxtables that is not in the default path, either
+
+  a) append the location of the pkg-config files like:
+
+	PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
+
+     (Assuming that files have been installed)
+or,
+
+  b) override the pkg-config variables, for example:
+
+	./configure libxtables_CFLAGS="-I../iptables/include" \
+		libxtables_LIBS="-L../iptables/.libs \
+			-Wl,-rpath,../iptables/.libs -lxtables"
+
+     (Use this in case you wish to use it without having to
+     run `make install`. This is because the libxtables.pc pkgconfig
+     file in ../iptables would already point to e.g. /usr/local.)
 
 
 Build-time options
@@ -90,4 +102,5 @@ Except for --with-kbuild, distributions should not have a need to
 supply any other flags (besides --prefix=/usr and perhaps
 --libdir=/usr/lib64, etc.) to configure when all prerequired packages
 are installed. If iptables-devel is installed, necessary headers should
-be in /usr/include, so --with-xtables is not needed.
+already be in /usr/include, so that overriding PKG_CONFIG_PATH,
+libxtables_CFLAGS and libxtables_LIBS variables should not be needed.
