@@ -29,3 +29,5 @@ $ make
 就完成了。
 
 更详细的说明可以查看代码库中的INSTALL文件。
+
+Ubuntu 用户安装可以参考这篇：http://liruqi.tumblr.com/post/4413950561/install-scholarzhang-on-ubuntu
