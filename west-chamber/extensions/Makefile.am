@@ -1,6 +1,9 @@
 # -*- Makefile -*-
 # AUTOMAKE
 
+AM_CPPFLAGS = ${regular_CPPFLAGS} -I${abs_top_srcdir}/extensions
+AM_CFLAGS = ${regular_CFLAGS} ${libxtables_CFLAGS}
+
 # Not having Kbuild in Makefile.extra because it will already recurse
 .PHONY: modules modules_install clean_modules
 
