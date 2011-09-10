@@ -1,5 +1,5 @@
 
-AC_INIT([xtables-addons], [1.36])
+AC_INIT([xtables-addons], [1.37])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 AC_PROG_INSTALL
@@ -42,7 +42,7 @@ regular_CFLAGS="-Wall -Waggregate-return -Wmissing-declarations \
 
 if test -n "$kbuilddir"; then
 	AC_MSG_CHECKING([kernel version that we will build against])
-	krel="$(make -sC "$kbuilddir" M=. kernelrelease)";
+	krel="$(make -sC "$kbuilddir" M=$PWD kernelrelease)";
 	kmajor="${krel%%[[^0-9]]*}";
 	kmajor="$(($kmajor+0))";
 	krel="${krel:${#kmajor}}";
@@ -65,7 +65,7 @@ if test -n "$kbuilddir"; then
 			echo "WARNING: You are trying a newer kernel. Results may vary. :-)";
 		elif test "$kmajor" -eq 3; then
 			:;
-		elif test "$kmajor" -eq 2 -a "$kmicro" -ge 29; then
+		elif test "$kmajor" -eq 2 -a "$kminor" -eq 6 -a "$kmicro" -ge 29; then
 			:;
 		else
 			echo "WARNING: That kernel version is not supported.";
@@ -78,6 +78,5 @@ AC_SUBST([regular_CFLAGS])
 AC_SUBST([kbuilddir])
 AC_SUBST([xtlibdir])
 AC_CONFIG_FILES([Makefile Makefile.iptrules Makefile.mans
-	extensions/Makefile 
-	extensions/ipset/Makefile])
+	extensions/Makefile])
 AC_OUTPUT
