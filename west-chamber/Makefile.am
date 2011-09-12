@@ -3,12 +3,12 @@
 ACLOCAL_AMFLAGS  = -I m4
 SUBDIRS          = extensions
 
-man_MANS := xtables-addons.8
+man_MANS := west-chamber.8
 
 .PHONY: FORCE
 FORCE:
 
-xtables-addons.8: FORCE
+west-chamber.8: FORCE
 	${MAKE} -f Makefile.mans all;
 
 install-exec-hook:
