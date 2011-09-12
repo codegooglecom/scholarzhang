@@ -1,6 +1,0 @@
-#summary the reason to choose to be based on netfilter.
-#labels Phase-Design
-
-简单说一下架构设计的想法。首先我们还是放弃了在用户态实现，而选择了在内核态实现。在[http://gfwrev.blogspot.com/2009/11/gfw_10.html GFW研究与诊断工具]一文中介绍了若干种实现入侵检测和响应的方式。这些用户态方法要保持运行一个程序才能生效，这样就难以避免出现各种问题，性能也不好。其中那个libnetfilter*虽然可以在用户态操作TCP/IP，但在实现上仍然需要read()一次把内核态的数据复制到用户态，显然是绕弯了。考虑我们的目标，是使我们的TCP栈有特殊的行为从而混淆GFW，更底层的说就是在特定时候发一些特定的包。因此最直接的方式就是修改内核。由于任务很简单但是变化很快，所以需要采取比较灵活的方式，也就是可加载内核模块(LKM)。调研发现两种可行方法：kprobes可以在内核特定位置设置断点然后执行自定义的代码，这样通过内核模块直接修改TCP栈；在netfilter的钩子中加一些东西，在IP层修改TCP行为。
-
-在这两种方法中我们选择了后一种方法。虽然kprobes应该是最直接的方法，但是问题是TCP栈的行为不简单，开发者以前没有现在也懒得RTFS；而netfilter对应了一个强大友好的配置工具iptables，有很多现成的功能可以使用，并且感谢Jan Engelhardt提供了一套非常清爽的xtables模块开发框架[http://xtables-addons.sourceforge.net xtables-addons]使得事情变得非常简单。
