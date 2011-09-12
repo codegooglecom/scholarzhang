@@ -1,6 +1,8 @@
 #summary self-introduction
 #labels Phase-Support,Featured
 
+<a href="https://scholarzhang.googlecode.com/svn/trunk/west-chamber/README.html">Full README (English)</a>.
+----
 *西厢计划*提供一组工具，使得用户在一次设置之后，能够以普通程序直连目标网络，而避免GFW的大部分影响。其命名是为了向中国古典文学史上翻墙的先驱者张某致敬。西厢计划现在已经达到alpha可用状态，在初步的测试中可以让用户以普通浏览器无障碍地直连Youtube。
 
 == 特性 ==
