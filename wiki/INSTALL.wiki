@@ -1,33 +1,6 @@
 #summary instructions for installation.
 #labels Phase-Deploy
 
-此处提供的源代码是xtables-addons的重包装，保留了一些必须组件，添加了我们写的组件，去掉了不需要的组件。
+Moved to <a href="https://scholarzhang.googlecode.com/svn/trunk/west-chamber/INSTALL.html">INSTALL page in svn</a>.
 
-== 环境要求 ==
-
- * iptables >= 1.4.3
- * kernel >= 2.6.17 (>= 2.6.18.5 if 2.6.18.x)
-   * - CONFIG_NF_CONNTRACK or CONFIG_IP_NF_CONNTRACK
-   * - CONFIG_NF_CONNTRACK_MARK or CONFIG_IP_NF_CONNTRACK_MARK enabled =y or as module (=m)
-
-目前只支持Linux，不支持BSD系和Windows以及其他平台。
-
-== 步骤 ==
-安装准备好autotools工具链（autconf，automake，libtool）。
-
-include路径中应该含有`xtables.h`头文件，分别在iptables的开发包（或源码）和内核头文件包（或者内核源码）中。因此Ubuntu/Debian用户通常需要安装iptables-dev以及linux-headers-```uname -r```。
-
-{{{
-$ ./autogen.sh
-$ CFLAGS="-O3" ./configure --prefix=/usr ...
-$ make
-# make install
-}}}
-
-注意不同的发行版对于路径设置有所不同，比如debian需要在configure时特别设置`--libexecdir=/lib`。
-
-就完成了。
-
-更详细的说明可以查看代码库中的INSTALL文件。
-
-Ubuntu 用户安装可以参考这篇：http://liruqi.tumblr.com/post/4413950561/install-scholarzhang-on-ubuntu
+Ubuntu 用户安装可以参考<a href="http://liruqi.tumblr.com/post/4413950561/install-scholarzhang-on-ubuntu">这篇</a>。
