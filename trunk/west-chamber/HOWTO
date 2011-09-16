@@ -132,7 +132,8 @@ It will generate configuration suitable for putting into
 `/etc/network/interfaces` on two endpoints. After that you can `ifup` both
 interfaces and try to ping the other endpoint. Now the data on the wire is
 protected by IPsec and UDP obfuscation and looks like UDP garbage to any NIDS
-in the middle.
+in the middle. Or you could use similar iptables rules with UDPENCAP to
+encapsulate IPsec transport mode packets without setting up tunnel.
 
 Troubleshooting
 ===============

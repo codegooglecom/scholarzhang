@@ -13,7 +13,10 @@ in combination with the kernel's Kbuild system.
      # make install
 
 You have to run ./autogen.sh (requires automake) if `configure` script is not
-present.
+present. The `configure` script should be run with bash.
+
+To install the UDPENCAP target, you need to enable it in `mconfig`. Warning:
+this module is highly experimental. Use with caution!
 
 Supported configurations for this release
 =========================================

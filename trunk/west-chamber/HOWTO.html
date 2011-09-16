@@ -182,7 +182,7 @@ COMMIT
 <pre><code>-m set --match-set NOCLIP src
 </code></pre>
 <h1 id="setting-up-static-tunnels-with-obfuscation"><a href="#TOC"><span class="header-section-number">7</span> Setting up static tunnels with obfuscation</a></h1>
-<p>Edit paramters in the script <code>examples/gen-iptun-interfaces.sh</code>, and run it. It will generate configuration suitable for putting into <code>/etc/network/interfaces</code> on two endpoints. After that you can <code>ifup</code> both interfaces and try to ping the other endpoint. Now the data on the wire is protected by IPsec and UDP obfuscation and looks like UDP garbage to any NIDS in the middle.</p>
+<p>Edit paramters in the script <code>examples/gen-iptun-interfaces.sh</code>, and run it. It will generate configuration suitable for putting into <code>/etc/network/interfaces</code> on two endpoints. After that you can <code>ifup</code> both interfaces and try to ping the other endpoint. Now the data on the wire is protected by IPsec and UDP obfuscation and looks like UDP garbage to any NIDS in the middle. Or you could use similar iptables rules with UDPENCAP to encapsulate IPsec transport mode packets without setting up tunnel.</p>
 <h1 id="troubleshooting"><a href="#TOC"><span class="header-section-number">8</span> Troubleshooting</a></h1>
 <p>When you see connection resets in browser, go to syslog and check if any gfw entries exist.</p>
 <p>You can also use tcpdump to save traffic dump. When problems happen, you can use wireshark to open it and trace back for the reason.</p>
