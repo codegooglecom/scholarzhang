@@ -1,5 +1,6 @@
 HEAD
 ====
+- Added UDPENCAP target module. (2011-09-16)
 - Rewrited documentations. (2011-09-12)
 - Removed ipset. Please use ipset provided by your distribution. (2011-09-10)
 - xtables-addons: updated to 1.37 (2011-09-10)
