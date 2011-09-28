@@ -1,0 +1,3 @@
+#summary instructions for installation.
+
+Moved to <a href="https://scholarzhang.googlecode.com/svn/trunk/west-chamber/HOWTO.zh.html">How to use</a>.
