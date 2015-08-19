@@ -1,4 +1,0 @@
-#labels Phase-Support
-#how to use after install.
-
-Moved to <a href="https://scholarzhang.googlecode.com/svn/trunk/west-chamber/HOWTO.zh.html">How to use</a>.
